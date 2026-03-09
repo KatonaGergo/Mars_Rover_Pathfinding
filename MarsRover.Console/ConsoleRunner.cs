@@ -33,11 +33,9 @@ public class ConsoleRunner
         WriteColored("  SAVED MODEL INFO", ConsoleColor.Cyan);
         WriteSeparator('═');
 
-        // Build a temporary runner just to call GetModelInfo
-        // (no map needed — we only touch the meta file)
-        var dummyMap = new GameMap();   // empty map, fine for meta-only query
-        var runner   = new SimulationRunner(dummyMap, 24, modelPath);
-        var info     = runner.GetModelInfo();
+        // Use the static overload — reads meta directly from disk,
+        // no GameMap or SimulationRunner instance needed.
+        var info = SimulationRunner.GetModelInfo(modelPath);
 
         if (info == null)
         {

@@ -18,7 +18,7 @@ public class AppConfig
 {
     // ── Defaults ──────────────────────────────────────────────────────────────
     [JsonPropertyName("mapPath")]
-    public string MapPath    { get; set; } = "mars_map_50x50.csv";
+    public string MapPath    { get; set; } = "Map/mars_map_50x50.csv";
 
     [JsonPropertyName("hours")]
     public int    Hours      { get; set; } = 24;

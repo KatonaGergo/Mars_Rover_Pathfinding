@@ -403,16 +403,39 @@ public class SimulationRunner
     /// <summary>
     /// Returns metadata about the saved model at this runner's model path,
     /// or null if no model has been saved yet.
-    /// Used by the terminal --info flag and the resume prompt.
     /// </summary>
     public ModelInfo? GetModelInfo()
+        => GetModelInfo(_modelPath);
+
+    /// <summary>
+    /// Static overload — reads model metadata from disk using only the base
+    /// model path. Does NOT require a GameMap or a SimulationRunner instance.
+    /// Safe to call from --info or the resume prompt before the map is loaded.
+    /// </summary>
+    public static ModelInfo? GetModelInfo(string modelPath)
     {
-        if (!HasSavedModel) return null;
-        var meta = LoadMeta();
+        string qtablePath = modelPath + ".qtable.json";
+        string metaPath   = modelPath + ".meta.json";
+
+        if (!File.Exists(qtablePath)) return null;
+
+        // Read meta (optional — might not exist for old saves)
+        ModelMeta meta = new();
+        if (File.Exists(metaPath))
+        {
+            try
+            {
+                meta = System.Text.Json.JsonSerializer.Deserialize<ModelMeta>(
+                           File.ReadAllText(metaPath)) ?? new ModelMeta();
+            }
+            catch { /* malformed meta — use defaults */ }
+        }
+
         int stateCount = 0;
-        try { stateCount = QTable.Load(QTablePath).StateCount; } catch { }
+        try { stateCount = QTable.Load(qtablePath).StateCount; } catch { }
+
         return new ModelInfo(
-            ModelPath:         _modelPath,
+            ModelPath:         modelPath,
             EpisodesCompleted: meta.EpisodesCompleted,
             BestMinerals:      meta.BestMinerals,
             Epsilon:           meta.Epsilon,

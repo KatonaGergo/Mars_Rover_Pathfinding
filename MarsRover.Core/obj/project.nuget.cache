@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "LXLbfpXdRBY=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Dári Andrea\\Desktop\\Mars\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Dári Andrea\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.0\\microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
+    "C:\\Users\\Dári Andrea\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\8.0.0\\microsoft.extensions.logging.abstractions.8.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}

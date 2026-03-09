@@ -1,7 +1,7 @@
 {
   // Path to the 50x50 Mars map CSV file.
   // Can be absolute or relative to the working directory.
-  "mapPath": "mars_map_50x50.csv",
+  "mapPath": "Map/mars_map_50x50.csv",
 
   // Mission duration in hours. One Martian sol = 24 hours = 48 ticks.
   "hours": 24,
