@@ -398,6 +398,28 @@ public class SimulationRunner
 
     // ── Persistence ───────────────────────────────────────────────────────────
 
+    // ── Public model info ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns metadata about the saved model at this runner's model path,
+    /// or null if no model has been saved yet.
+    /// Used by the terminal --info flag and the resume prompt.
+    /// </summary>
+    public ModelInfo? GetModelInfo()
+    {
+        if (!HasSavedModel) return null;
+        var meta = LoadMeta();
+        int stateCount = 0;
+        try { stateCount = QTable.Load(QTablePath).StateCount; } catch { }
+        return new ModelInfo(
+            ModelPath:         _modelPath,
+            EpisodesCompleted: meta.EpisodesCompleted,
+            BestMinerals:      meta.BestMinerals,
+            Epsilon:           meta.Epsilon,
+            SavedAt:           meta.SavedAt,
+            StatesKnown:       stateCount);
+    }
+
     private void SaveModel(QTable table, double epsilon, int episodesCompleted, int bestMinerals)
     {
         table.Save(QTablePath);
