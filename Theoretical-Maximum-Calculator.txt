@@ -151,47 +151,8 @@ Lets run a data analysis!
   ┌──────────────────────────────────────────┐
   │  THEORETICAL MAXIMUM = 23 MINERALS      │
   └──────────────────────────────────────────┘
-
 ────────────────────────────────────────────────────────────────────────────────
-PART 5 — THE SPEED-TO-DISTANCE RULE (and why it changes everything)
-────────────────────────────────────────────────────────────────────────────────
-
-  The original real-map calculation assumed the agent always picked the
-  fastest affordable speed — which turned out to be a bug, not a feature.
-
-  THE BUG:
-    When the target mineral is 1 step away, paying for Fast speed (3 cells/tick)
-    still only moves the rover 1 cell — the path runs out after 1 step.
-    So the agent was spending 18% battery to move 1 cell when it only
-    needed to spend 2%.
-
-    Old:  1-step move at Fast  →  +10% solar  -18% move  =  -8% net  (DAY)
-    New:  1-step move at Slow  →  +10% solar  -2%  move  =  +8% net  (DAY)
-    Swing per adjacent move during daytime: +16% battery
-
-  THE FIX (ChooseSpeed in HybridAgent.cs):
-    Speed is now capped to the number of steps actually remaining in the path:
-      1 step  remaining  →  Slow   ceiling  (pay  2%, not 18%)
-      2 steps remaining  →  Normal ceiling  (pay  8%, not 18%)
-      3+ steps           →  Fast   allowed
-
-  THE IMPACT on the competition map:
-    Minerals #1–#5 are each 1 step apart (adjacent cluster near start).
-    Old agent: each 1-step move cost -8% net → entered the far cluster at 84%.
-    New agent: each 1-step move costs +8% net → capped at 100% throughout day.
-
-    That difference of 16% × 13 adjacent moves during the day = 208% worth
-    of battery headroom (capped, but the rover never dips below 94% all day).
-    That surplus carries directly into the night phase where every percent
-    is worth half a mineral at 4%/mineral cost.
-
-    Night phase comparison:
-      Old:  entered night at  84%  →  3 night minerals  →  18 total
-      New:  entered night at  98%  →  6 night minerals  →  21 total
-
-
-────────────────────────────────────────────────────────────────────────────────
-PART 6 — REAL MAP OPTIMUM: 21 MINERALS (corrected)
+PART 5 — REAL MAP OPTIMUM: 21 MINERALS (corrected)
 ────────────────────────────────────────────────────────────────────────────────
 
   Map:    mars_map_50x50.csv
@@ -286,7 +247,7 @@ PART 6 — REAL MAP OPTIMUM: 21 MINERALS (corrected)
 
 
 ────────────────────────────────────────────────────────────────────────────────
-PART 7 — SUMMARY TABLE
+PART 6 — SUMMARY TABLE
 ────────────────────────────────────────────────────────────────────────────────
 
   Scenario                                       Minerals   Valid?
