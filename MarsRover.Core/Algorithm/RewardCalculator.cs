@@ -6,8 +6,8 @@ namespace MarsRover.Core.Algorithm;
 public static class HybridRewardCalculator
 {
     public const double MineralCollected  =  150.0;
-    public const double ReturnedToBase    =  300.0; // bumped — returning home is critical
-    public const double FailedToReturn    = -200.0; // stronger penalty
+    public const double ReturnedToBase    =  300.0;
+    public const double FailedToReturn    = -200.0;
     public const double BatteryDied       = -300.0;
     public const double LowBatteryWarning =  -15.0;
     public const double CriticalBattery   =  -50.0;
