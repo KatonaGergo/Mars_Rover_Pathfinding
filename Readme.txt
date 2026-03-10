@@ -79,6 +79,13 @@ PROJECT STRUCTURE
   │   │   ├── AStarPathfinder.cs   8-directional A* with diagonal passability
   │   │   ├── EnergyCalculator.cs  All battery math (move cost, solar, trip delta)
   │   │   └── SimulationEngine.cs  Tick-by-tick executor — applies actions, logs
+  │   │
+  │   ├── Algorithm_Records/
+  │   │      ├── QLearningAgent.cs    Early pure Q-learning agent (superseded)
+  │   │      ├── DQNAgent.cs          Neural network DQN experiment (superseded)
+  │   │      ├── NeuralNetwork.cs     Feedforward net used by DQNAgent (superseded)
+  │   │      └── ReplayBuffer.cs      Uniform replay buffer (superseded by PER)
+  │   │
   │   └── Algorithm/
   │       ├── QTable.cs            Q-value store with JSON save/load
   │       ├── HybridAgent.cs       The main agent — Q-table strategy + A* navigation
@@ -86,10 +93,6 @@ PROJECT STRUCTURE
   │       ├── PrioritizedReplayBuffer.cs  Priority queue replay buffer
   │       ├── RewardCalculator.cs  Reward shaping constants and logic
   │       ├── ModelInfo.cs         Public record for saved model metadata
-  │       ├── QLearningAgent.cs    Early pure Q-learning agent (superseded)
-  │       ├── DQNAgent.cs          Neural network DQN experiment (superseded)
-  │       ├── NeuralNetwork.cs     Feedforward net used by DQNAgent (superseded)
-  │       ├── ReplayBuffer.cs      Uniform replay buffer (superseded by PER)
   │       └── EpisodeSnapshot.cs  Lightweight episode path record
   │
   ├── MarsRover.Console/           Terminal interface
