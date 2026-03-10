@@ -4,9 +4,7 @@ using System.Text.Json.Serialization;
 namespace MarsRover.Console;
 
 /// <summary>
-/// All runtime parameters for the Mars Rover agent, in one place.
-///
-/// LOAD ORDER (later overrides earlier):
+/// Runtime parameters for the Mars Rover agent
 ///   1. Built-in defaults  (hardcoded below)
 ///   2. config.json        (written next to the binary on first run)
 ///   3. CLI flags          (--map, --hours, --episodes, --model)
@@ -41,7 +39,7 @@ public class AppConfig
     /// <summary>
     /// Loads config.json from the working directory.
     /// If the file does not exist, writes a default one and returns defaults.
-    /// Any field missing from the file keeps its default value.
+    /// Any field missing from the file keeps its default value. Pretty self-explanatory.
     /// </summary>
     public static AppConfig Load(string configPath = "config.json")
     {

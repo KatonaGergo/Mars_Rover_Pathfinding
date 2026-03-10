@@ -5,9 +5,9 @@ using MarsRover.Core.Simulation;
 namespace MarsRover.Console;
 
 /// <summary>
-/// Terminal interface for the Mars Rover Q-learning agent.
+/// Terminal interface for the Mars Rover Q-Learning agent.
 ///
-/// FLOW:
+/// The FLOW, so like how it goes:
 ///   1. Print mission parameters
 ///   2. If a saved model exists: show its info and ask to resume or run-only
 ///   3. Train for N episodes (live progress bar)
@@ -33,8 +33,6 @@ public class ConsoleRunner
         WriteColored("  SAVED MODEL INFO", ConsoleColor.Cyan);
         WriteSeparator('═');
 
-        // Use the static overload — reads meta directly from disk,
-        // no GameMap or SimulationRunner instance needed.
         var info = SimulationRunner.GetModelInfo(modelPath);
 
         if (info == null)
