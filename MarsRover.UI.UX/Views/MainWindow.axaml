@@ -1,0 +1,139 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MarsRover.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="800"
+        x:Class="MarsRover.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="MarsRover">
+       
+
+    <Design.DataContext>
+       
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <DockPanel LastChildFill="True">
+        
+        <StackPanel DockPanel.Dock="Top" 
+                    Orientation="Horizontal" 
+                    Spacing="15" 
+                    
+                    Background="#11151C">
+            <TextBlock Text="MARS ROVER" Foreground="Orange" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
+            <Button Content="TRAIN &amp; RUN" Background="#D35400" Foreground="White"/>
+            <Button Content=">>" Foreground="White" Background="Gray"></Button>
+            <Button Content="Play" Background="#D35400" Foreground="White"></Button>
+            <Button Content=">>" Foreground="White" Background="Gray"></Button>
+            
+
+        </StackPanel>
+
+        <DockPanel DockPanel.Dock="Right" Width="300" Margin="10,0,10,10" Background="Black">
+            <ScrollViewer>
+
+                <StackPanel Spacing="10">
+                    
+                    <Border Background="#151921" CornerRadius="8" Padding="15" BorderBrush="#2A2E37" BorderThickness="1">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Minerals Collected" Foreground="Orange" FontSize="15" FontWeight="Bold"/>
+                            <Grid ColumnDefinitions="*, *, *">
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="BLUE" Foreground="#4A90E2" FontSize="9" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="0" Foreground="White" FontSize="20" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="YELLOW" Foreground="#F5A623" FontSize="9" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="0" Foreground="White" FontSize="20" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="GREEN" Foreground="#7ED321" FontSize="9" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="0" Foreground="White" FontSize="20" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+						
+                        <StackPanel Spacing="10">          
+                         <Border Background="#151921" CornerRadius="8" Padding="15" BorderBrush="#2A2E37" BorderThickness="1">
+						  <StackPanel>
+                             <TextBlock Text="Telemetry" Foreground="Orange" FontWeight="Bold" FontSize="15"></TextBlock>
+                             
+                              </StackPanel>
+                         </Border>
+
+                    </StackPanel>
+
+             <StackPanel Spacing="10">
+    <Border Background="#151921" CornerRadius="8" Padding="15" BorderBrush="#2A2E37" BorderThickness="1">
+        
+        <StackPanel Spacing="10">
+            
+            <TextBlock Text="Battery Level" Foreground="Orange" FontWeight="Bold" FontSize="15"/>
+
+            <Grid ColumnDefinitions="*,*,*,*,*,*">
+                
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="0" Foreground="Gray" FontSize="20" />
+                </StackPanel>
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="2" Foreground="Gray" FontSize="20"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="4" Foreground="Gray" FontSize="20" />
+                </StackPanel>
+                <StackPanel Grid.Column="3">
+                    <TextBlock Text="6" Foreground="Gray" FontSize="20" />
+                </StackPanel>
+                <StackPanel Grid.Column="4">
+                    <TextBlock Text="8" Foreground="Gray" FontSize="20" />
+                </StackPanel>
+                <StackPanel Grid.Column="5">
+                    <TextBlock Text="10" Foreground="Gray" FontSize="20"/>
+                </StackPanel>
+
+                                
+            </Grid> 
+            </StackPanel> 
+             </Border> 
+                </StackPanel> 
+
+                     <StackPanel Spacing="10">
+                         <Border Background="#151921" CornerRadius="8" Padding="15" BorderBrush="#2A2E37" BorderThickness="1">
+						    <StackPanel>
+                             <TextBlock Text="Event Log" Foreground="Orange" FontWeight="Bold"></TextBlock>
+                                <TextBox ></TextBox>
+                            </StackPanel>
+                         </Border>
+                    </StackPanel>
+                    </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+
+       <Grid Margin="10,0,0,10">
+    <Border Background="#12151C" CornerRadius="8" BorderBrush="#2A2E37" BorderThickness="1">
+        <ItemsControl ItemsSource="{Binding MapCells}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Rows="50" Columns="50"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:MapCellViewModel">
+                    <Border Margin="0" 
+                            Background="{Binding Color}" 
+                            BorderBrush="Black" 
+                            BorderThickness="1"/>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Border>
+</Grid>
+
+    </DockPanel>
+
+     
+</Window>
