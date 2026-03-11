@@ -1,26 +1,18 @@
 namespace MarsRover.Core.Algorithm;
 
 /// <summary>
-/// Prioritized Experience Replay buffer.
+/// Prioritized Experience Replay buffer. (PER)
 ///
 /// Instead of sampling uniformly, transitions are sampled proportionally to
 /// their priority, where priority = |TD error| + epsilon_priority.
 ///
-/// WHY THIS HELPS HERE:
 ///   With only ~1,200 states and ~15 strategic decisions per episode, most
-///   transitions in a uniform buffer are from well-known states with TD error ≈ 0
-///   — they teach nothing. PER ensures each replay batch is dominated by the
+///   transitions in a uniform buffer are from well-known states with TD error ≈ 0,
+///   so they teach nothing. PER ensures each replay batch is dominated by the
 ///   transitions where the agent was genuinely surprised: an unexpected +150 mineral
 ///   reward, a −200 failed-return penalty, a battery death. These are the experiences
 ///   that most need to propagate through the Q-table.
-///
-/// IMPLEMENTATION:
-///   Simple O(n) proportional sampling — acceptable for our 20k buffer.
-///   A sum-tree would be O(log n) but the constant factor isn't worth the
-///   complexity at this scale. Full rebuild of cumulative sums on every sample
-///   would be expensive; instead we maintain a running max_priority and
-///   only recompute when actually sampling.
-///
+///   
 /// PRIORITY FORMULA:
 ///   priority(i) = (|δ_i| + PriorityEpsilon) ^ PriorityExponent
 ///   where δ_i is the TD error at last update.
@@ -38,7 +30,7 @@ public class PrioritizedReplayBuffer
 
     private int    _head        = 0;
     private int    _count       = 0;
-    private double _maxPriority = 1.0; // new transitions start at max so they're sampled first
+    private double _maxPriority = 1.0; // new transitions start at max so they are sampled first
 
     public int  Count    => _count;
     public int  Capacity => _capacity;
@@ -146,5 +138,5 @@ public readonly record struct PrioritizedTransition(
     string NextStateKey,
     bool   IsTerminal,
     double Priority,
-    int    Index        // position in buffer — needed for UpdatePriority
+    int    Index        // position in buffer
 );

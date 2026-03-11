@@ -5,20 +5,6 @@ namespace MarsRover.Core.Algorithm;
 
 /// <summary>
 /// THE HYBRID AGENT  (Q-table strategy + A* navigation)
-///
-/// REGRESSION FIXES (vs previous version):
-///   1. NavigateTo now queues ALL steps including step 0 and returns DequeueMove.
-///      Previously it returned a single-direction Move for the first step, paying
-///      Fast energy (18%) but moving only 1 cell instead of 3. Now every tick
-///      uses the full movement budget.
-///   2. BestAffordableSpeedForLeg takes the actual battery-at-mineral as input.
-///      Previously BestAffordableSpeedFrom re-estimated the forward leg cost using
-///      Normal speed regardless of what speed was actually used, overestimating
-///      battery by up to 12% and causing valid minerals to be rejected.
-///   3. State space reduced from 76,800 → 1,200 states. The Q-table only makes
-///      4 strategic decisions; it doesn't need 8 direction bins or 10 battery bins
-///      to do that. Fewer states means every state gets visited ~12× per episode
-///      instead of never, which is the difference between convergence and noise.
 /// </summary>
 public class HybridAgent
 {
@@ -209,13 +195,6 @@ public class HybridAgent
     }
 
     // ── Navigation ────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// FIX: Now queues ALL path steps (including index 0) and calls DequeueMove,
-    /// so the first tick gets the full multi-step movement budget.
-    /// Previously returned a single-direction Move for step 0, paying Fast
-    /// energy (18%) but moving only 1 cell.
-    /// </summary>
     private RoverAction NavigateTo(int tx, int ty, RoverState state, GameMap liveMap)
     {
         var path = AStarPathfinder.FindPath(liveMap, state.X, state.Y, tx, ty);
@@ -230,7 +209,6 @@ public class HybridAgent
             if (path.Count == 0) return RoverAction.StandbyAction;
         }
 
-        // Queue ALL steps — DequeueMove will pack up to speed steps per tick
         _currentPath.Clear();
         foreach (var step in path)
             _currentPath.Enqueue(step);
@@ -240,11 +218,7 @@ public class HybridAgent
 
     /// <summary>
     /// Packs up to (int)speed queued path steps into a single free-movement action.
-    /// Each step can be in a different direction — this is the free-movement model.
-    /// Stops early before a mineral so mining fires cleanly on the next tick.
-    ///
-    /// Passes the real queue depth to ChooseSpeed so speed is capped to the
-    /// number of steps actually needed — no paying for Fast when 1 step remains.
+    /// Each step can be in a different direction, this is the free-movement model.
     /// </summary>
     private RoverAction DequeueMove(RoverState state, GameMap liveMap)
     {
@@ -266,7 +240,6 @@ public class HybridAgent
             simX = nx;
             simY = ny;
 
-            // Stop at mineral so next tick triggers mining cleanly
             if (liveMap.HasMineral(simX, simY)) break;
         }
 
@@ -300,13 +273,12 @@ public class HybridAgent
                 liveMap, pos.x, pos.y, liveMap.StartX, liveMap.StartY);
             if (stepsHome >= double.MaxValue) continue;
 
-            // Forward leg: fastest speed battery can afford
+
             var speedToMineral  = BestAffordableSpeedForLeg(state.Tick,
                                       (int)stepsToMineral, state.Battery);
             int ticksToMineral  = EnergyCalculator.TripTicks((int)stepsToMineral, speedToMineral);
             int tickAtMineral   = state.Tick + ticksToMineral;
 
-            // EXACT battery after arriving and mining
             double battToMineral = -EnergyCalculator.ExactTripDelta(
                                         state.Tick, (int)stepsToMineral, speedToMineral, _totalTicks);
             bool   miningDay    = SimulationEngine.IsDay(tickAtMineral);
@@ -316,15 +288,13 @@ public class HybridAgent
 
             if (battAtMineral < BatterySafetyMargin) continue;
 
-            // FIX: pass actual battAtMineral — not re-estimated from scratch
             var speedHome = BestAffordableSpeedForLeg(
                                 tickAtMineral + 1, (int)stepsHome, battAtMineral);
             int ticksHome = EnergyCalculator.TripTicks((int)stepsHome, speedHome);
 
-            // Time guard
             if (ticksToMineral + 1 + ticksHome + ReturnSafetyBuffer > ticksRemaining) continue;
 
-            // Battery guard for full trip
+
             double battHome = -EnergyCalculator.ExactTripDelta(
                                    tickAtMineral + 1, (int)stepsHome, speedHome, _totalTicks);
             if (battAtMineral - battHome < BatterySafetyMargin) continue;
@@ -347,13 +317,10 @@ public class HybridAgent
     ///   If 2 steps remain → Normal max (pay 8%, not 18%).
     ///   If 3+ steps remain → Fast allowed.
     ///
-    ///   This prevents paying Fast energy (18%/tick) to move a single cell,
-    ///   which was pure waste — same 1 cell moved, 9× the battery cost.
-    ///   With adjacent minerals this saves 16% battery per collection cycle.
+    ///   This prevents paying Fast energy (18%/tick) to move a single cell.
     ///
     /// <param name="stepsRemaining">
-    ///   How many path steps are still queued. Pass 0 to skip the cap
-    ///   (e.g. when path length is unknown, falls back to battery-only check).
+    ///   How many path steps are still queued.
     /// </param>
     /// </summary>
     public RoverSpeed ChooseSpeed(RoverState state, GameMap liveMap, int stepsRemaining = 0)
@@ -368,16 +335,15 @@ public class HybridAgent
             return BestAffordableSpeedForLeg(state.Tick, (int)stepsHome, state.Battery);
         }
 
-        // Cap speed to the number of steps actually available in the path.
-        // Never pay for 3-step speed when only 1 step remains.
+        // Cap speed to the number of steps actually available in the path. Never pay for 3-step speed when only 1 step remains.
         RoverSpeed maxSpeedByDistance = stepsRemaining switch
         {
             1   => RoverSpeed.Slow,
             2   => RoverSpeed.Normal,
-            _   => RoverSpeed.Fast     // 0 = unknown, 3+ = Fast allowed
+            _   => RoverSpeed.Fast
         };
 
-        // Pick the fastest speed that is (a) within distance cap and (b) affordable
+        // Pick the fastest speed that is within distance cap and affordable
         foreach (var speed in new[] { RoverSpeed.Fast, RoverSpeed.Normal, RoverSpeed.Slow })
         {
             if (speed > maxSpeedByDistance) continue;
@@ -389,9 +355,7 @@ public class HybridAgent
     }
 
     /// <summary>
-    /// FIX: Replaces the broken BestAffordableSpeedFrom.
     /// Picks fastest speed where battery AFTER the full trip >= safety margin.
-    /// Takes battery at the START of this leg as a direct parameter — no re-estimation.
     /// </summary>
     private RoverSpeed BestAffordableSpeedForLeg(int startTick, int pathSteps, double battAtStart)
     {
@@ -434,16 +398,16 @@ public class HybridAgent
         _phase = MissionPhase.Collection;
     }
 
-    // ── State builder — 1,200 states (was 76,800) ────────────────────────────
+    // ── State builder — 1,200 states ──
 
     public HybridQLearningState BuildQLearningState(RoverState state, GameMap liveMap)
     {
-        // 5 battery bands: 0-19, 20-39, 40-59, 60-79, 80-100
+        // We use 5 battery bands: 0-19, 20-39, 40-59, 60-79, 80-100
         int battBucket = Math.Clamp((int)(state.Battery / 20.0), 0, 4);
 
         // Nearest mineral distance — 5 bands
         var nearest    = liveMap.NearestMineral(state.X, state.Y);
-        int distBucket = 4; // none
+        int distBucket = 4;
         int dirBucket  = 0;
 
         if (nearest.HasValue)
@@ -452,13 +416,13 @@ public class HybridAgent
                                                      nearest.Value.x, nearest.Value.y);
             distBucket = dist switch
             {
-                <= 4  => 0,  // close
-                <= 12 => 1,  // medium
-                <= 25 => 2,  // far
-                <= 40 => 3,  // very far
-                _     => 4   // out of range
+                <= 4  => 0,  // close distance
+                <= 12 => 1,  // medium distance
+                <= 25 => 2,  // far distance
+                <= 40 => 3,  // very far distance
+                _     => 4   // out of range distance
             };
-            // 4 direction quadrants (NE/NW/SE/SW)
+            // We have 4 direction quadrants (NE/NW/SE/SW), based on the relative position of the nearest mineral
             int dx = nearest.Value.x - state.X;
             int dy = nearest.Value.y - state.Y;
             dirBucket = (dx >= 0 ? 0 : 1) + (dy >= 0 ? 0 : 2); // 0=SE,1=SW,2=NE,3=NW
@@ -518,8 +482,7 @@ public enum HybridDecision
 
 /// <summary>
 /// 1,200-state Q-table key: 5×2×5×4×3×2
-/// The Q-table makes 4 strategic decisions — it doesn't need fine-grained
-/// battery or direction resolution. Fewer states = faster convergence.
+/// The Q-table makes 4 strategic decisions (seek any mineral / seek nearest mineral / return to base / standby)
 /// </summary>
 public record struct HybridQLearningState(
     int  BatteryBucket,    // 0-4 (5 bands of 20%)

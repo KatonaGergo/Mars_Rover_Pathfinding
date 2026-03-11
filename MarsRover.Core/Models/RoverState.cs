@@ -2,13 +2,13 @@ namespace MarsRover.Core.Models;
 
 /// <summary>
 /// Full simulation state at a given tick.
-/// Immutable snapshot — the SimulationEngine produces a new one each tick.
+/// Immutable snapshot, the SimulationEngine produces a new one each tick.
 /// </summary>
 public record RoverState(
     int   X,
     int   Y,
     double Battery,
-    int   Tick,            // half-hour ticks elapsed since start
+    int   Tick,          //1 tick is half an hour
     int   MineralsB,
     int   MineralsY,
     int   MineralsG,
@@ -17,7 +17,7 @@ public record RoverState(
 )
 {
     // ── Time helpers ─────────────────────────────────────────────────────────
-    // A full Martian sol = 24h = 48 half-hour ticks
+    // A full sol = 24h = 48 half-hour ticks
     // Day = 16h = 32 ticks | Night = 8h = 16 ticks
     public const int TicksPerSol   = 48;
     public const int DayTicksPerSol = 32;

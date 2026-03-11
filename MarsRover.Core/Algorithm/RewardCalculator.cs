@@ -5,6 +5,7 @@ namespace MarsRover.Core.Algorithm;
 
 public static class HybridRewardCalculator
 {
+    // Reward values for various events and conditions. These are tunable hyperparameters.
     public const double MineralCollected  =  150.0;
     public const double ReturnedToBase    =  300.0;
     public const double FailedToReturn    = -200.0;
@@ -28,8 +29,6 @@ public static class HybridRewardCalculator
         if (isTerminal)
         {
             if (result.Battery <= 0)    reward += BatteryDied;
-            // Only penalise FailedToReturn if battery is alive — battery death
-            // already carries -300; stacking -200 on top would double-penalise
             if (returnedHome)           reward += ReturnedToBase;
             else if (result.Battery > 0) reward += FailedToReturn;
             reward += result.TotalMinerals * 10.0;
@@ -48,7 +47,6 @@ public static class HybridRewardCalculator
     }
 }
 
-// Backward-compat alias
 public static class RewardCalculator
 {
     public static double Calculate(
