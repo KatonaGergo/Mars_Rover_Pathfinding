@@ -165,10 +165,10 @@ public class SimulationEngine
 
         switch (tile)
         {
-            case TileType.MineralB: _mineralsB++; return "⛏ Collected Blue mineral";
-            case TileType.MineralY: _mineralsY++; return "⛏ Collected Yellow mineral";
-            case TileType.MineralG: _mineralsG++; return "⛏ Collected Green mineral";
-            default:                              return "⛏ Collected mineral";
+            case TileType.MineralB: _mineralsB++; return "⛏ Collected Blue mineral"; // Vízjég
+            case TileType.MineralY: _mineralsY++; return "⛏ Collected Yellow mineral"; // Ritka arany
+            case TileType.MineralG: _mineralsG++; return "⛏ Collected Green mineral"; // Ritka ásvány
+            default:                              return "⛏ Collected mineral";       // Default value, should never happen
         }
     }
 
