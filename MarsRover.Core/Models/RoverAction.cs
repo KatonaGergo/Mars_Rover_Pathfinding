@@ -6,9 +6,7 @@ namespace MarsRover.Core.Models;
 /// FREE MOVEMENT MODEL:
 ///   A Move action carries a list of 1–3 individual direction steps.
 ///   The number of steps equals the speed value (Slow=1, Normal=2, Fast=3).
-///   Each step moves the rover one cell in any of the 8 directions — they
-///   do NOT have to be the same direction. This means a Fast rover can go
-///   North, North, East in a single tick, following a curved A* path optimally.
+///   Each step moves the rover one cell in any of the 8 directions.
 ///
 ///   Energy cost is based on speed (the number of steps), applied once per tick:
 ///     Slow (1 step)  — k×1² = 2%
@@ -17,9 +15,9 @@ namespace MarsRover.Core.Models;
 /// </summary>
 public enum RoverSpeed
 {
-    Slow   = 1, // 1 step/tick,  E = k×1² = 2%
-    Normal = 2, // 2 steps/tick, E = k×2² = 8%
-    Fast   = 3  // 3 steps/tick, E = k×3² = 18%
+    Slow   = 1, // For example: 1 step/tick,  E = k×1² = 2%
+    Normal = 2, // For example: 2 steps/tick, E = k×2² = 8%
+    Fast   = 3  // For example: 3 steps/tick, E = k×3² = 18%
 }
 
 public enum Direction
@@ -43,12 +41,12 @@ public enum RoverActionType
 
 public record RoverAction(
     RoverActionType         Type,
-    IReadOnlyList<Direction>? Directions = null,   // ordered list of steps for this tick
+    IReadOnlyList<Direction>? Directions = null,
     RoverSpeed              Speed = RoverSpeed.Slow)
 {
     // ── Convenience properties ────────────────────────────────────────────────
 
-    /// First direction in the list — for backward-compat code that only needs one.
+    /// First direction in the list
     public Direction? Dir => Directions is { Count: > 0 } d ? d[0] : null;
 
     // ── Factory methods ───────────────────────────────────────────────────────
@@ -62,14 +60,14 @@ public record RoverAction(
 
     /// <summary>
     /// Multi-step free-movement action.
-    /// <paramref name="dirs"/> contains one direction per movement point — up to
-    /// (int)speed entries. If fewer steps are available (near goal), pass fewer.
+    /// <paramref name="dirs"/> contains one direction per movement point, up to
+    /// (int)speed entries. If fewer steps are available (near mineral, for example), pass fewer.
     /// </summary>
     public static RoverAction Move(IReadOnlyList<Direction> dirs, RoverSpeed speed) =>
         new(RoverActionType.Move, dirs, speed);
 
     /// <summary>
-    /// All single-direction actions — used by legacy QLearningAgent and AllActions().
+    /// All single-direction actions, used by old legacy QLearningAgent and AllActions().
     /// </summary>
     public static IEnumerable<RoverAction> AllActions()
     {

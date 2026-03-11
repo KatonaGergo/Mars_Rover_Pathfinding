@@ -5,7 +5,7 @@ namespace MarsRover.Core.Models;
 /// </summary>
 public enum TileType
 {
-    Surface,    // '.' - passable Martian ground
+    Surface,    // '.' - passable ground
     Obstacle,   // '#' - impassable rock
     MineralB,   // 'B' - blue mineral (water ice)
     MineralY,   // 'Y' - yellow mineral (rare gold)

@@ -4,14 +4,13 @@ using MarsRover.Core.Models;
 namespace MarsRover.Core.Algorithm;
 
 /// <summary>
-/// Q[stateKey][actionIdx] = expected cumulative reward.
+/// Q[stateKey][actionIdx] = expected reward.
 ///
-/// ADDITIONS for the learning improvements:
 ///   UpdateByKeyWithAlpha — takes an explicit alpha so the caller can pass
-///     the current decayed learning rate without mutating LearningRate.
-///   GetTDError — returns the raw TD error (r + γ·maxQ(s') - Q(s,a)).
+///     the current decayed learning rate.
+///   GetTDError: returns the raw TD error (r + γ·maxQ(s') - Q(s,a)).
 ///     Used by PER to compute priorities and by eligibility traces for the δ signal.
-///   DecayLearningRate — call once per episode; alpha floors at LearningRateMin.
+///   DecayLearningRate -> call once per episode, alpha floors at LearningRateMin.
 /// </summary>
 public class QTable
 {
@@ -21,7 +20,7 @@ public class QTable
     private readonly Dictionary<string, double[]> _table = new();
 
     // ── Hyperparameters ───────────────────────────────────────────────────────
-    public double LearningRate    { get; set; } = 0.3;    // α — start high, decay down
+    public double LearningRate    { get; set; } = 0.3;    // α — start high first for exploration, then slowly decay it down for exploitation
     public double LearningRateMin { get; set; } = 0.02;   // α floor
     public double LearningRateDecayFactor { get; set; } = 0.9995; // per-episode decay
     public double Discount        { get; set; } = 0.95;   // γ
@@ -73,7 +72,7 @@ public class QTable
     /// Returns the raw TD error: δ = r + γ·maxQ(s') - Q(s,a).
     ///
     /// Used by:
-    ///   - Eligibility traces: δ is the scalar broadcast to all traced states.
+    ///   - Eligibility traces: δ is a broadcast to all eligible state-action pairs for their updates.
     ///   - PER: |δ| + ε is stored as the transition's priority.
     /// </summary>
     public double GetTDError(string stateKey, int actionIdx, double reward,
@@ -95,10 +94,8 @@ public class QTable
     /// <summary>
     /// Q(s,a) ← Q(s,a) + alpha · δ
     /// where δ = r + γ·maxQ(s') - Q(s,a).
-    ///
-    /// The alpha parameter lets callers pass a per-step decayed rate
-    /// without permanently mutating LearningRate.
     /// </summary>
+
     public void UpdateByKeyWithAlpha(string stateKey, int actionIdx, double reward,
                                       string nextStateKey, int actionCount, double alpha)
     {
@@ -108,7 +105,7 @@ public class QTable
     }
 
     /// <summary>
-    /// Direct delta-weighted update — used by eligibility traces where the delta
+    /// Direct delta-weighted update, used by eligibility traces where the delta
     /// is pre-computed and shared across multiple state-action pairs.
     /// Q(s,a) ← Q(s,a) + alpha · delta · eligibility
     /// </summary>
@@ -192,7 +189,7 @@ public class QTable
             Discount             = source.Discount
         };
 
-        // Deep copy every row so future updates to source don't affect clone
+        // Deep copy every row so future updates to source wont affect the clone
         foreach (var (key, row) in source._table)
             clone._table[key] = (double[])row.Clone();
 

@@ -9,18 +9,14 @@ namespace MarsRover.Core.Simulation;
 ///   All moves (cardinal and diagonal) cost 1 movement point.
 ///   This matches the free-movement model: Fast=3 points/tick can be spent
 ///   in any combination of directions (e.g. North, North, East).
-///   Diagonal steps are not penalised — they cost the same as cardinal steps.
 ///
 /// Heuristic: Chebyshev distance — exact for uniform 8-directional cost.
-///   h(n) = max(|dx|, |dy|) = minimum steps needed in any direction
-///   This is both admissible and consistent, guaranteeing optimal paths.
+///   h(n) = max(|dx|, |dy|) = minimum steps needed in any direction guaranteeing optimal paths.
 /// </summary>
 public static class AStarPathfinder
 {
-    // All moves cost 1 movement point — cardinal and diagonal are equal
     private const double StepCost = 1.0;
 
-    // Kept for PathCost() backward compat — diagonal is no longer more expensive
     private static readonly bool[] IsCardinal = [true, false, true, false, true, false, true, false];
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -28,11 +24,9 @@ public static class AStarPathfinder
     /// <summary>
     /// Finds the shortest path from (startX,startY) to (goalX,goalY).
     /// Returns an ordered list of (x, y, direction) steps, or empty list if no path exists.
-    /// The start cell is NOT included in the result; the goal IS included.
     /// </summary>
     public static List<PathStep> FindPath(GameMap map, int startX, int startY, int goalX, int goalY)
     {
-        // Trivial case
         if (startX == goalX && startY == goalY)
             return [];
 
@@ -59,8 +53,6 @@ public static class AStarPathfinder
 
                 if (!map.IsPassable(nx, ny)) continue;
 
-                // Diagonal corner-cutting check:
-                // Don't allow cutting through obstacle corners diagonally
                 if (!IsCardinal[(int)dir])
                 {
                     if (!map.IsPassable(current.X + dx, current.Y) ||
@@ -68,7 +60,7 @@ public static class AStarPathfinder
                         continue;
                 }
 
-                double stepCost   = StepCost; // uniform — all directions cost 1
+                double stepCost   = StepCost; // uniform, all directions cost 1
                 double tentativeG = gScore.GetValueOrDefault((current.X, current.Y), double.MaxValue)
                                     + stepCost;
 
@@ -83,7 +75,7 @@ public static class AStarPathfinder
             }
         }
 
-        return []; // No path found
+        return []; // If no path found
     }
 
     /// <summary>
@@ -103,7 +95,7 @@ public static class AStarPathfinder
     // ── Heuristic ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Chebyshev distance — admissible heuristic for 8-directional movement.
+    /// Chebyshev distance for 8-directional movement.
     /// h = max(|Δx|, |Δy|)
     /// </summary>
     public static double Heuristic(int x1, int y1, int x2, int y2)
