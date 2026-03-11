@@ -1,6 +1,9 @@
 {
   "ExpandedNodes": [
-    ""
+    "",
+    "\\MarsRover.UI.UX",
+    "\\MarsRover.UI.UX\\Views"
   ],
+  "SelectedNode": "\\MarsRover.UI.UX\\MarsRover.csproj",
   "PreviewInSolutionExplorer": false
 }

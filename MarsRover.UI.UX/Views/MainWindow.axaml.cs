@@ -7,6 +7,7 @@ namespace MarsRover.Views
         public MainWindow()
         {
             InitializeComponent();
+
         }
     }
 }
