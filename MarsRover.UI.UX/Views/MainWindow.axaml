@@ -3,19 +3,19 @@
         xmlns:vm="using:MarsRover.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="800"
+        mc:Ignorable="d" d:DesignWidth="1440" d:DesignHeight="810"
         x:Class="MarsRover.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
         Title="MarsRover">
-       
+        
 
     <Design.DataContext>
        
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <DockPanel LastChildFill="True">
+    <DockPanel LastChildFill="True" Background="Black">
         
         <StackPanel DockPanel.Dock="Top" 
                     Orientation="Horizontal" 
@@ -24,9 +24,10 @@
                     Background="#11151C">
             <TextBlock Text="MARS ROVER" Foreground="Orange" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
             <Button Content="TRAIN &amp; RUN" Background="#D35400" Foreground="White"/>
-            <Button Content=">>" Foreground="White" Background="Gray"></Button>
+                     <Button Background="Gray" Width="35" Height="30"><StackPanel><Image Source="avares://MarsRover/Assets/arrow-left.png"></Image></StackPanel></Button>
             <Button Content="Play" Background="#D35400" Foreground="White"></Button>
-            <Button Content=">>" Foreground="White" Background="Gray"></Button>
+            <Button Background="Gray" Width="35" Height="30"><StackPanel><Image Source="avares://MarsRover/Assets/arrow-right.png"></Image></StackPanel></Button>
+			<Button Content="Load" Foreground="White" Background="#D35400"></Button>
             
 
         </StackPanel>
@@ -53,8 +54,23 @@
                                     <TextBlock Text="0" Foreground="White" FontSize="20" HorizontalAlignment="Center"/>
                                 </StackPanel>
                             </Grid>
+                            <StackPanel>
+								<TextBlock Text="Total: " Foreground="White" HorizontalAlignment="Center"> <TextBox Text="{Binding TotalAmount"><TextBox> </TextBox>
+                            </StackPanel>
                         </StackPanel>
+                        
                     </Border>
+
+
+                    <StackPanel Spacing="10">          
+                         <Border Background="#151921" CornerRadius="8" Padding="15" BorderBrush="#2A2E37" BorderThickness="1">
+						  <StackPanel>
+                             <TextBlock Text="Time" Foreground="Orange" FontWeight="Bold" FontSize="15"></TextBlock>
+                                <TextBlock Text="Day" Foreground="White" HorizontalAlignment="Center"></TextBlock>
+                              </StackPanel>
+                         </Border>
+
+                    </StackPanel>
 						
                         <StackPanel Spacing="10">          
                          <Border Background="#151921" CornerRadius="8" Padding="15" BorderBrush="#2A2E37" BorderThickness="1">
@@ -66,45 +82,12 @@
 
                     </StackPanel>
 
-             <StackPanel Spacing="10">
-    <Border Background="#151921" CornerRadius="8" Padding="15" BorderBrush="#2A2E37" BorderThickness="1">
-        
-        <StackPanel Spacing="10">
-            
-            <TextBlock Text="Battery Level" Foreground="Orange" FontWeight="Bold" FontSize="15"/>
-
-            <Grid ColumnDefinitions="*,*,*,*,*,*">
-                
-                <StackPanel Grid.Column="0">
-                    <TextBlock Text="0" Foreground="Gray" FontSize="20" />
-                </StackPanel>
-                <StackPanel Grid.Column="1">
-                    <TextBlock Text="2" Foreground="Gray" FontSize="20"/>
-                </StackPanel>
-                <StackPanel Grid.Column="2">
-                    <TextBlock Text="4" Foreground="Gray" FontSize="20" />
-                </StackPanel>
-                <StackPanel Grid.Column="3">
-                    <TextBlock Text="6" Foreground="Gray" FontSize="20" />
-                </StackPanel>
-                <StackPanel Grid.Column="4">
-                    <TextBlock Text="8" Foreground="Gray" FontSize="20" />
-                </StackPanel>
-                <StackPanel Grid.Column="5">
-                    <TextBlock Text="10" Foreground="Gray" FontSize="20"/>
-                </StackPanel>
-
-                                
-            </Grid> 
-            </StackPanel> 
-             </Border> 
-                </StackPanel> 
 
                      <StackPanel Spacing="10">
                          <Border Background="#151921" CornerRadius="8" Padding="15" BorderBrush="#2A2E37" BorderThickness="1">
 						    <StackPanel>
-                             <TextBlock Text="Event Log" Foreground="Orange" FontWeight="Bold"></TextBlock>
-                                <TextBox ></TextBox>
+                             <TextBlock Text="Event Log" Foreground="Orange" FontWeight="Bold" Margin="0,0,0,10"></TextBlock>
+                                <TextBox Height="200"  Margin="10,10,10,10"></TextBox>
                             </StackPanel>
                          </Border>
                     </StackPanel>
