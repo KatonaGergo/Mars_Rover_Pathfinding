@@ -9,11 +9,9 @@ namespace MarsRover.Core.Simulation;
 ///   All moves (cardinal and diagonal) cost 1 movement point.
 ///   This matches the free-movement model: Fast=3 points/tick can be spent
 ///   in any combination of directions (e.g. North, North, East).
-///   Diagonal steps are not penalised — they cost the same as cardinal steps.
 ///
 /// Heuristic: Chebyshev distance — exact for uniform 8-directional cost.
-///   h(n) = max(|dx|, |dy|) = minimum steps needed in any direction
-///   This is both admissible and consistent, guaranteeing optimal paths.
+///   h(n) = max(|dx|, |dy|) = minimum steps needed in any direction guaranteeing optimal paths.
 /// </summary>
 public static class AStarPathfinder
 {
@@ -97,7 +95,7 @@ public static class AStarPathfinder
     // ── Heuristic ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Chebyshev distance — admissible heuristic for 8-directional movement.
+    /// Chebyshev distance for 8-directional movement.
     /// h = max(|Δx|, |Δy|)
     /// </summary>
     public static double Heuristic(int x1, int y1, int x2, int y2)

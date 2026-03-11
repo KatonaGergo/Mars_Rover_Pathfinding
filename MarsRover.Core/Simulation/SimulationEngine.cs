@@ -36,7 +36,7 @@ public class SimulationEngine
             throw new ArgumentException("Duration must be at least 24 hours.", nameof(durationHours));
 
         _map         = map;
-        _totalTicks  = durationHours * 2; // 2 ticks per hour
+        _totalTicks  = durationHours * 2; // 2 ticks per hour (1 tick is a half an hour e.g an action)
         _x           = map.StartX;
         _y           = map.StartY;
         _battery     = EnergyCalculator.MaxBattery;
@@ -108,7 +108,7 @@ public class SimulationEngine
 
     private string ExecuteMove(IReadOnlyList<Direction> dirs, RoverSpeed speed, bool isDay)
     {
-        // Downgrade speed if battery can't afford it
+        // Downgrade speed if battery cant afford it
         if (!EnergyCalculator.CanAfford(_battery, RoverActionType.Move, speed, isDay))
             speed = RoverSpeed.Slow;
 
@@ -120,7 +120,6 @@ public class SimulationEngine
 
         // Execute each direction step in sequence.
         // FREE MOVEMENT: each step can be a different direction.
-        // Stop at the first blocked cell — partial moves are valid.
         int moved  = 0;
         int finalX = _x;
         int finalY = _y;
@@ -128,7 +127,7 @@ public class SimulationEngine
         foreach (var dir in dirs)
         {
             var (nx, ny) = _map.ApplyDirection(finalX, finalY, dir);
-            if (!_map.IsPassable(nx, ny)) break; // obstacle — stop here
+            if (!_map.IsPassable(nx, ny)) break; // its an obstacle, so stop here
             finalX = nx;
             finalY = ny;
             moved++;
@@ -141,9 +140,9 @@ public class SimulationEngine
         _x = finalX;
         _y = finalY;
 
-        // Build a compact log: "Move N→E→NE @ Fast ×3 → (12,7)"
+        // Build a compact log, for example:"Move N→E→NE @ Fast ×3 → (12,7)"
         var dirStr = string.Join("→", dirs.Take(moved)
-                         .Select(d => d.ToString()[..1])); // first letter: N E S W etc.
+                         .Select(d => d.ToString()[..1])); // use the first letter: N E S W etc.
         return $"Move {dirStr} @ {speed} ×{moved} → ({_x},{_y})";
     }
 
@@ -151,7 +150,7 @@ public class SimulationEngine
     {
         if (!_map.HasMineral(_x, _y))
         {
-            // Nothing to mine here — treat as standby
+            // Nothing to mine here, so treat as standby
             _battery = EnergyCalculator.Apply(_battery, RoverActionType.Standby,
                                                RoverSpeed.Slow, isDay);
             return "Mine attempted — no mineral here";

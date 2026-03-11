@@ -12,7 +12,7 @@ public class GameMap
     public const int Height = 50;
 
     private readonly TileType[,]          _tiles;
-    private readonly HashSet<(int x, int y)>  _originalMinerals; // never mutated — used for Clone()
+    private readonly HashSet<(int x, int y)>  _originalMinerals; // never mutated, used for Clone()
     private readonly HashSet<(int x, int y)>  _remainingMinerals; // mutated as minerals are collected
 
     public int StartX { get; private set; }
@@ -83,7 +83,6 @@ public class GameMap
     /// <summary>
     /// Parses a .csv map where tile tokens are separated by commas.
     /// Example row: ".,.,.,.,#,B,.,S,.,#"
-    /// Each token's first non-whitespace character is the tile code.
     /// </summary>
     public static GameMap ParseCsv(string[] lines)
     {
@@ -93,14 +92,14 @@ public class GameMap
 
         for (int y = 0; y < Height && y < lines.Length; y++)
         {
-            // Skip blank lines (e.g. trailing newline at end of file)
+            // Skip blank lines
             if (string.IsNullOrWhiteSpace(lines[y])) continue;
 
             var tokens = lines[y].Split(',');
 
             for (int x = 0; x < Width && x < tokens.Length; x++)
             {
-                // Trim whitespace, take first char — handles "B", " B", "B " equally
+                // Trim whitespace
                 var token = tokens[x].Trim();
                 if (token.Length == 0) continue;
 
@@ -168,7 +167,7 @@ public class GameMap
 
     public (int dx, int dy) GetDelta(Direction dir) => DirectionDeltas[(int)dir];
 
-    /// <summary>Static accessor for direction deltas — used by AStarPathfinder.</summary>
+    /// <summary>Static accessor for direction deltas, used by AStarPathfinder.</summary>
     public static (int dx, int dy) DirectionDelta(Direction dir) => DirectionDeltas[(int)dir];
 
     // ── Distance helpers ──────────────────────────────────────────────────────
@@ -181,7 +180,7 @@ public class GameMap
 
     /// <summary>
     /// Finds the nearest remaining mineral.
-    /// Uses Chebyshev distance as a fast approximation — avoids running full A*
+    /// Uses Chebyshev distance as a fast approximation, hence it avoids running full A*
     /// on every mineral every tick (which would be millions of calls during training).
     /// A* is only used for actual path navigation, not target selection.
     /// </summary>

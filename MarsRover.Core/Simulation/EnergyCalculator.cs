@@ -11,7 +11,7 @@ public static class EnergyCalculator
 {
     public const double MaxBattery       = 100.0;
     public const double MinBattery       = 0.0;
-    public const double K                = 2.0;    // energy constant
+    public const double K                = 2.0;    // energy is a constant
     public const double DayChargePerTick = 10.0;   // +10 per half-hour during day
     public const double StandbyDrain     = 1.0;    // idle, not mining
     public const double MiningDrain      = 2.0;    // while mining
@@ -63,10 +63,6 @@ public static class EnergyCalculator
     /// Calculates the exact net battery delta for a trip of <paramref name="pathSteps"/>
     /// A* cells at the given speed, starting at tick <paramref name="startTick"/>.
     ///
-    /// Because Fast=3 cells/tick, Normal=2, Slow=1, the number of ticks consumed
-    /// differs by speed — and day/night changes during the trip affect charging.
-    /// This is therefore the only correct way to compare speed choices.
-    ///
     /// Returns the net battery CHANGE (negative = drain, positive = net charge).
     /// To get the battery REQUIRED: Math.Max(0, -ExactTripDelta(...))
     /// </summary>
@@ -89,7 +85,7 @@ public static class EnergyCalculator
 
     /// <summary>
     /// How many ticks does a trip of <paramref name="pathSteps"/> A* cells take
-    /// at the given speed?
+    /// at the given speed
     /// </summary>
     public static int TripTicks(int pathSteps, RoverSpeed speed)
         => (int)Math.Ceiling(pathSteps / (double)(int)speed);
