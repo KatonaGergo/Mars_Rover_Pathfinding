@@ -350,7 +350,7 @@ public static class TerminalUI
 
         // Stars around the planet
         foreach (var (row, col, g) in Stars)
-            WA(row, col, g.ToString(), ConsoleColor.DarkGray);
+            WA(row, col, g, ConsoleColor.DarkGray);
 
         // Title block
         WA(R_Title,     0, Center("──  ·  M A R S   R O V E R  ·  ──"),  ConsoleColor.Red);

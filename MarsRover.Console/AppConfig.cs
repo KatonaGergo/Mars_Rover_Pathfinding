@@ -19,7 +19,7 @@ public class AppConfig
     public string MapPath    { get; set; } = "Map/mars_map_50x50.csv";
 
     [JsonPropertyName("hours")]
-    public int    Hours      { get; set; } = 24;
+    public int    Hours      { get; set; } = 48;
 
     [JsonPropertyName("episodes")]
     public int    Episodes   { get; set; } = 500;

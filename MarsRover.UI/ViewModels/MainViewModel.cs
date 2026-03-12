@@ -51,7 +51,8 @@ public partial class MainViewModel : ObservableObject
 
     // ── Map + model path ─────────────────────────────────────────────────────
     [ObservableProperty] private GameMap? _gameMap;
-    private string _modelPath = "dqn_model"; // base path — runner appends .weights.json / .meta.json
+    private string _modelPath = "dqn_model";
+    private string _mapPath   = "Saved_Models/";
     [ObservableProperty] private bool _hasSavedModel = false;
 
     /// <summary>Set by MainWindow to open the native file picker.</summary>
@@ -106,7 +107,7 @@ public partial class MainViewModel : ObservableObject
     // Rolling average window for smoothed reward line
     private readonly Queue<double> _rewardWindow = new();
     private const    int           RewardWindowSize = 20;
-    private const    int           ChartUpdateInterval = 4;  // matches SimulationRunner.ParallelThreads (episodes per iteration)
+    private const    int           ChartUpdateInterval = 4;
 
     public MainViewModel()
     {
@@ -195,7 +196,7 @@ public partial class MainViewModel : ObservableObject
         };
 
         // No map loaded on startup — user must click Load Map
-        TrainingStatus = "No map loaded. Click 'LOAD MAP' to begin.";
+        TrainingStatus = "No map loaded. Click '📂 LOAD MAP' to begin.";
     }
 
     // ── Commands ──────────────────────────────────────────────────────────────
@@ -236,9 +237,10 @@ public partial class MainViewModel : ObservableObject
     {
         if (GameMap == null)
         {
-            TrainingStatus = "No map loaded. Click 'LOAD MAP' first.";
+            TrainingStatus = "No map loaded. Click '📂 LOAD MAP' first.";
             return;
         }
+        // Show popup first — actual training starts on WatchTraining or SkipWatch
         ShowWatchPrompt = true;
     }
 
@@ -265,8 +267,8 @@ public partial class MainViewModel : ObservableObject
         IsTraining       = true;
         bool resuming    = File.Exists(_modelPath + ".qtable.json");
         TrainingStatus   = resuming
-            ? "Resuming Q-table training from saved model..."
-            : "Training Hybrid Q-table agent...";
+            ? "▶ Resuming Q-table training from saved model..."
+            : "🧠 Training Hybrid Q-table agent...";
         TrainingProgress = 0;
 
         // Clear previous training data
@@ -322,10 +324,18 @@ public partial class MainViewModel : ObservableObject
                     TrainingProgress  = 100;
                     ShowGhostReplay   = false;
                     ShowTrainingChart = false;  // return to map for playback
-                    _hasSavedModel = true;
-                    TrainingStatus = $"Training complete — " +
+                    _hasSavedModel    = true;
+
+                    // Save run log to results/ — same output as Console project
+                    string? logPath = null;
+                    if (log.Count > 0 && GameMap != null)
+                        logPath = MarsRover.Core.Utils.MissionLogger.Save(
+                            log, _mapPath, DurationHours, TrainingEpisodes, _modelPath, GameMap);
+
+                    TrainingStatus = $"✅ Training complete — " +
                                      $"{training.BestMinerals} peak minerals | " +
-                                     $"Model saved to {_modelPath}.qtable.json";
+                                     $"Model saved to {_modelPath}.qtable.json" +
+                                     (logPath != null ? $" | Log → {logPath}" : "");
                     ResetDisplayToStart();
                 });
             });
@@ -343,6 +353,7 @@ public partial class MainViewModel : ObservableObject
     private async Task SaveModel()
     {
         if (PickFileAsync == null) return;
+        // Use a save dialog — reuse PickFileAsync direction but guide user with status
         TrainingStatus = $"Model saved at: {_modelPath}.weights.json";
         await Task.CompletedTask;
     }
@@ -356,6 +367,7 @@ public partial class MainViewModel : ObservableObject
             var path = await PickFileAsync();
             if (path == null) return;
 
+            // Strip extensions — user may select .weights.json or base name
             _modelPath = path.Replace(".qtable.json", "").Replace(".meta.json", "");
             _hasSavedModel = File.Exists(_modelPath + ".qtable.json");
 
@@ -411,11 +423,12 @@ public partial class MainViewModel : ObservableObject
         if (PickFileAsync == null) return;
 
         var path = await PickFileAsync();
-        if (path == null) return;
+        if (path == null) return; // user cancelled
 
         try
         {
-            GameMap = MarsRover.Core.Simulation.GameMap.LoadFromFile(path);
+            GameMap  = MarsRover.Core.Simulation.GameMap.LoadFromFile(path);
+            _mapPath = path;
             RoverX  = GameMap.StartX;
             RoverY  = GameMap.StartY;
             TrainingStatus = $"Map loaded — {System.IO.Path.GetFileName(path)} " +
@@ -497,6 +510,8 @@ public partial class MainViewModel : ObservableObject
             ShowGhostReplay   = true;
             ShowTrainingChart = false;
         }
+        // Always start timer — feeds GhostEventLog even if panel not visible.
+        // If user opens via 🧠 REPLAY mid-replay, they see live log immediately.
         _ghostTimer.Start();
     }
 
@@ -509,7 +524,7 @@ public partial class MainViewModel : ObservableObject
             Task.Delay(600).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
             {
                 IsGhostMode = false;
-                if (!_userWantsToWatch) return;
+                if (!_userWantsToWatch) return; // user opened manually — keep panel open
                 ShowGhostReplay = false;
             }));
             return;

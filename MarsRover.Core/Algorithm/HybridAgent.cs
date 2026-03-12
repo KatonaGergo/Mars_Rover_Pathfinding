@@ -157,8 +157,17 @@ public class HybridAgent
     {
         int idx      = _qTable.BestActionIndex(qState.ToKey(), (int)HybridDecision.Count);
         var decision = IndexToDecision(idx);
-        if (decision == HybridDecision.Standby && liveMap.RemainingMinerals.Count > 0)
-            return HybridDecision.SeekMineral;
+
+        // Safety guards: the Q-table can learn suboptimal ReturnToBase or Standby
+        // decisions from noisy early exploration. MustReturnNow handles the real
+        // return trigger via exact battery/time math — the Q-table should never
+        // override that with a premature ReturnToBase while minerals still exist.
+        if (liveMap.RemainingMinerals.Count > 0)
+        {
+            if (decision == HybridDecision.ReturnToBase) return HybridDecision.SeekMineral;
+            if (decision == HybridDecision.Standby)      return HybridDecision.SeekMineral;
+        }
+
         return decision;
     }
 
@@ -195,6 +204,13 @@ public class HybridAgent
     }
 
     // ── Navigation ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// FIX: Now queues ALL path steps (including index 0) and calls DequeueMove,
+    /// so the first tick gets the full multi-step movement budget.
+    /// Previously returned a single-direction Move for step 0, paying Fast
+    /// energy (18%) but moving only 1 cell.
+    /// </summary>
     private RoverAction NavigateTo(int tx, int ty, RoverState state, GameMap liveMap)
     {
         var path = AStarPathfinder.FindPath(liveMap, state.X, state.Y, tx, ty);
@@ -209,6 +225,7 @@ public class HybridAgent
             if (path.Count == 0) return RoverAction.StandbyAction;
         }
 
+        // Queue ALL steps — DequeueMove will pack up to speed steps per tick
         _currentPath.Clear();
         foreach (var step in path)
             _currentPath.Enqueue(step);
@@ -218,7 +235,11 @@ public class HybridAgent
 
     /// <summary>
     /// Packs up to (int)speed queued path steps into a single free-movement action.
-    /// Each step can be in a different direction, this is the free-movement model.
+    /// Each step can be in a different direction — this is the free-movement model.
+    /// Stops early before a mineral so mining fires cleanly on the next tick.
+    ///
+    /// Passes the real queue depth to ChooseSpeed so speed is capped to the
+    /// number of steps actually needed — no paying for Fast when 1 step remains.
     /// </summary>
     private RoverAction DequeueMove(RoverState state, GameMap liveMap)
     {
@@ -240,6 +261,7 @@ public class HybridAgent
             simX = nx;
             simY = ny;
 
+            // Stop at mineral so next tick triggers mining cleanly
             if (liveMap.HasMineral(simX, simY)) break;
         }
 
@@ -273,12 +295,27 @@ public class HybridAgent
                 liveMap, pos.x, pos.y, liveMap.StartX, liveMap.StartY);
             if (stepsHome >= double.MaxValue) continue;
 
+            // Forward leg speed: mirrors ChooseSpeed's night conservatism rule.
+            // Deep night → Slow. ≤2 ticks until dawn → Normal allowed.
+            // During day → fastest affordable speed.
+            RoverSpeed speedToMineral;
+            if (SimulationEngine.IsDay(state.Tick))
+            {
+                speedToMineral = BestAffordableSpeedForLeg(state.Tick,
+                                     (int)stepsToMineral, state.Battery);
+            }
+            else
+            {
+                int tickInSol      = state.Tick % RoverState.TicksPerSol;
+                int ticksUntilDawn = RoverState.TicksPerSol - tickInSol;
+                RoverSpeed nightCap = ticksUntilDawn <= 2 ? RoverSpeed.Normal : RoverSpeed.Slow;
+                speedToMineral = stepsToMineral <= 1 ? RoverSpeed.Slow : nightCap;
+            }
 
-            var speedToMineral  = BestAffordableSpeedForLeg(state.Tick,
-                                      (int)stepsToMineral, state.Battery);
             int ticksToMineral  = EnergyCalculator.TripTicks((int)stepsToMineral, speedToMineral);
             int tickAtMineral   = state.Tick + ticksToMineral;
 
+            // EXACT battery after arriving and mining
             double battToMineral = -EnergyCalculator.ExactTripDelta(
                                         state.Tick, (int)stepsToMineral, speedToMineral, _totalTicks);
             bool   miningDay    = SimulationEngine.IsDay(tickAtMineral);
@@ -288,13 +325,15 @@ public class HybridAgent
 
             if (battAtMineral < BatterySafetyMargin) continue;
 
+            // Home leg: use best affordable speed (return is always urgent-optimal)
             var speedHome = BestAffordableSpeedForLeg(
                                 tickAtMineral + 1, (int)stepsHome, battAtMineral);
             int ticksHome = EnergyCalculator.TripTicks((int)stepsHome, speedHome);
 
+            // Time guard
             if (ticksToMineral + 1 + ticksHome + ReturnSafetyBuffer > ticksRemaining) continue;
 
-
+            // Battery guard for full trip
             double battHome = -EnergyCalculator.ExactTripDelta(
                                    tickAtMineral + 1, (int)stepsHome, speedHome, _totalTicks);
             if (battAtMineral - battHome < BatterySafetyMargin) continue;
@@ -317,10 +356,23 @@ public class HybridAgent
     ///   If 2 steps remain → Normal max (pay 8%, not 18%).
     ///   If 3+ steps remain → Fast allowed.
     ///
-    ///   This prevents paying Fast energy (18%/tick) to move a single cell.
+    ///   This prevents paying Fast energy (18%/tick) to move a single cell,
+    ///   which was pure waste — same 1 cell moved, 9× the battery cost.
+    ///   With adjacent minerals this saves 16% battery per collection cycle.
+    ///
+    /// NIGHT CONSERVATISM RULE (multi-sol fix):
+    ///   At night, default to Slow to preserve battery for dawn recharge.
+    ///   Exception: if dawn is ≤2 ticks away, allow up to Normal.
+    ///   Rationale: deep into the night (10+ ticks remaining) sprinting burns
+    ///   16–64% more battery than Slow for no net benefit — dawn will refill it.
+    ///   But right at the sol boundary (ticks 46–47) the rover may be mid-path
+    ///   to a mineral that straddles the transition; forcing Slow there costs
+    ///   an extra tick per 2-step move and cascades into losing the last 2–3
+    ///   minerals of the chain. Allowing Normal at the boundary recovers those
+    ///   minerals without reverting to the battery-drain behaviour mid-night.
     ///
     /// <param name="stepsRemaining">
-    ///   How many path steps are still queued.
+    ///   How many path steps are still queued. Pass 0 to skip the distance cap.
     /// </param>
     /// </summary>
     public RoverSpeed ChooseSpeed(RoverState state, GameMap liveMap, int stepsRemaining = 0)
@@ -335,15 +387,34 @@ public class HybridAgent
             return BestAffordableSpeedForLeg(state.Tick, (int)stepsHome, state.Battery);
         }
 
-        // Cap speed to the number of steps actually available in the path. Never pay for 3-step speed when only 1 step remains.
+        // NIGHT CONSERVATISM: cap speed at night unless dawn is imminent.
+        // ticksUntilDawn = TicksPerSol - tickInSol (how many ticks until sol wraps to day).
+        // ≤ 2 ticks until dawn → allow Normal (boundary mineral recovery).
+        // > 2 ticks until dawn → Slow only (preserve battery for recharge).
+        if (!SimulationEngine.IsDay(state.Tick))
+        {
+            int tickInSol     = state.Tick % RoverState.TicksPerSol;
+            int ticksUntilDawn = RoverState.TicksPerSol - tickInSol;
+            RoverSpeed nightCap = ticksUntilDawn <= 2 ? RoverSpeed.Normal : RoverSpeed.Slow;
+
+            return stepsRemaining switch
+            {
+                1 => RoverSpeed.Slow,
+                2 => nightCap,
+                _ => nightCap
+            };
+        }
+
+        // Cap speed to the number of steps actually available in the path.
+        // Never pay for 3-step speed when only 1 step remains.
         RoverSpeed maxSpeedByDistance = stepsRemaining switch
         {
             1   => RoverSpeed.Slow,
             2   => RoverSpeed.Normal,
-            _   => RoverSpeed.Fast
+            _   => RoverSpeed.Fast     // 0 = unknown, 3+ = Fast allowed
         };
 
-        // Pick the fastest speed that is within distance cap and affordable
+        // Pick the fastest speed that is (a) within distance cap and (b) affordable
         foreach (var speed in new[] { RoverSpeed.Fast, RoverSpeed.Normal, RoverSpeed.Slow })
         {
             if (speed > maxSpeedByDistance) continue;
@@ -398,16 +469,21 @@ public class HybridAgent
         _phase = MissionPhase.Collection;
     }
 
-    // ── State builder — 1,200 states ──
+    // ── State builder — 1,800 states (was 1,200) ─────────────────────────────
+    // Expanding IsDay (2 values) → SolPhaseBucket (3 values) so the Q-table
+    // can learn distinct policies for early-day, late-day and night phases.
+    // Without this, a 24h-trained model sees all night ticks as "last 16 ticks
+    // of the mission" and panics, whereas multi-sol night ticks are routine.
+    // State space: 5×3×5×4×3×2 = 1,800  (was 5×2×5×4×3×2 = 1,200)
 
     public HybridQLearningState BuildQLearningState(RoverState state, GameMap liveMap)
     {
-        // We use 5 battery bands: 0-19, 20-39, 40-59, 60-79, 80-100
+        // 5 battery bands: 0-19, 20-39, 40-59, 60-79, 80-100
         int battBucket = Math.Clamp((int)(state.Battery / 20.0), 0, 4);
 
         // Nearest mineral distance — 5 bands
         var nearest    = liveMap.NearestMineral(state.X, state.Y);
-        int distBucket = 4;
+        int distBucket = 4; // none
         int dirBucket  = 0;
 
         if (nearest.HasValue)
@@ -416,19 +492,19 @@ public class HybridAgent
                                                      nearest.Value.x, nearest.Value.y);
             distBucket = dist switch
             {
-                <= 4  => 0,  // close distance
-                <= 12 => 1,  // medium distance
-                <= 25 => 2,  // far distance
-                <= 40 => 3,  // very far distance
-                _     => 4   // out of range distance
+                <= 4  => 0,  // close
+                <= 12 => 1,  // medium
+                <= 25 => 2,  // far
+                <= 40 => 3,  // very far
+                _     => 4   // out of range
             };
-            // We have 4 direction quadrants (NE/NW/SE/SW), based on the relative position of the nearest mineral
+            // 4 direction quadrants (NE/NW/SE/SW)
             int dx = nearest.Value.x - state.X;
             int dy = nearest.Value.y - state.Y;
             dirBucket = (dx >= 0 ? 0 : 1) + (dy >= 0 ? 0 : 2); // 0=SE,1=SW,2=NE,3=NW
         }
 
-        // Urgency: 2 levels
+        // Urgency: 2 levels (relative — works the same for any duration)
         int ticksRemaining = _totalTicks - state.Tick;
         double distToBase  = liveMap.ChebyshevDistance(state.X, state.Y,
                                                         liveMap.StartX, liveMap.StartY);
@@ -442,7 +518,17 @@ public class HybridAgent
             _ => 2
         };
 
-        return new HybridQLearningState(battBucket, state.IsDay, distBucket,
+        // Sol phase: 3 buckets — lets Q-table learn day-cycle behaviour across
+        // multiple sols. Replaces the 2-value IsDay bool.
+        //   0 = Night          (ticks 32-47 of each sol)  no solar, conserve
+        //   1 = Late day       (ticks 16-31 of each sol)  plan before dark
+        //   2 = Early day      (ticks  0-15 of each sol)  exploit solar freely
+        int tickInSol   = state.Tick % RoverState.TicksPerSol;
+        int solPhase    = tickInSol >= RoverState.DayTicksPerSol ? 0   // night
+                        : tickInSol >= 16                         ? 1   // late day
+                                                                  : 2;  // early day
+
+        return new HybridQLearningState(battBucket, solPhase, distBucket,
                                         dirBucket, mineralsLeft, urgencyBucket);
     }
 
@@ -481,12 +567,17 @@ public enum HybridDecision
 }
 
 /// <summary>
-/// 1,200-state Q-table key: 5×2×5×4×3×2
-/// The Q-table makes 4 strategic decisions (seek any mineral / seek nearest mineral / return to base / standby)
+/// 1,800-state Q-table key: 5×3×5×4×3×2
+/// Expanded from 1,200 (was 5×2×5×4×3×2) by replacing IsDay (2 values) with
+/// SolPhase (3 values: 0=night / 1=late-day / 2=early-day).
+/// This lets the Q-table learn distinct policies for each sol phase, which is
+/// critical for multi-sol missions where night is routine, not end-of-mission.
+/// All dimensions are relative — no absolute tick counts — so the same trained
+/// model transfers across any mission duration.
 /// </summary>
 public record struct HybridQLearningState(
     int  BatteryBucket,    // 0-4 (5 bands of 20%)
-    bool IsDay,
+    int  SolPhase,         // 0=night, 1=late-day (ticks 16-31), 2=early-day (ticks 0-15)
     int  DistBucket,       // 0-4 (close/medium/far/very far/none)
     int  DirBucket,        // 0-3 (quadrant: SE/SW/NE/NW)
     int  MineralsLeft,     // 0-2 (none/few/many)
@@ -494,5 +585,5 @@ public record struct HybridQLearningState(
 )
 {
     public string ToKey() =>
-        $"{BatteryBucket},{(IsDay?1:0)},{DistBucket},{DirBucket},{MineralsLeft},{UrgencyBucket}";
+        $"{BatteryBucket},{SolPhase},{DistBucket},{DirBucket},{MineralsLeft},{UrgencyBucket}";
 }
