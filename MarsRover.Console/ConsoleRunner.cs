@@ -5,65 +5,50 @@ using MarsRover.Core.Simulation;
 namespace MarsRover.Console;
 
 /// <summary>
-/// Terminal interface for the Mars Rover Q-Learning agent.
-///
-/// The FLOW, so like how it goes:
-///   1. Print mission parameters
-///   2. If a saved model exists: show its info and ask to resume or run-only
-///   3. Train for N episodes (live progress bar)
-///   4. Run one deployment simulation (pure exploitation, epsilon=0)
-///   5. Print the full tick-by-tick log
-///   6. Print final summary
+/// Terminal dashboard for the Mars Rover Q-learning agent.
 /// </summary>
 public class ConsoleRunner
 {
     private readonly AppConfig _cfg;
-    private const int BarWidth = 40;
+    private const int W = 72; // dashboard width
 
     public ConsoleRunner(AppConfig cfg) => _cfg = cfg;
 
-    // ── --info entry point ────────────────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // --info entry point
+    // ═════════════════════════════════════════════════════════════════════════
 
-    /// <summary>
-    /// Prints saved model metadata and exits. Called by Program.cs for --info.
-    /// </summary>
     public static void PrintModelInfo(string modelPath)
     {
-        WriteSeparator('═');
-        WriteColored("  SAVED MODEL INFO", ConsoleColor.Cyan);
-        WriteSeparator('═');
-
+        PrintBanner();
         var info = SimulationRunner.GetModelInfo(modelPath);
 
+        BoxTop("  SAVED MODEL INFO");
         if (info == null)
         {
-            WriteColored($"  No saved model found at: {modelPath}.qtable.json", ConsoleColor.Yellow);
+            BoxLine($"  No saved model at: {modelPath}.qtable.json", ConsoleColor.Yellow);
         }
         else
         {
-            System.Console.WriteLine($"  Model path:   {info.ModelPath}.qtable.json");
-            System.Console.WriteLine($"  Saved at:     {FormatDate(info.SavedAt)}");
-            System.Console.WriteLine($"  Episodes:     {info.EpisodesCompleted:N0}");
-            System.Console.WriteLine($"  Best result:  {info.BestMinerals} minerals");
-            System.Console.WriteLine($"  Epsilon:      {info.Epsilon:F4}  (0=pure exploit, 1=random)");
-            System.Console.WriteLine($"  States known: {info.StatesKnown:N0}");
+            BoxLine($"  Path     :  {info.ModelPath}.qtable.json");
+            BoxLine($"  Saved    :  {FormatDate(info.SavedAt)}");
+            BoxLine($"  Episodes :  {info.EpisodesCompleted:N0}");
+            BoxLine($"  Best     :  {info.BestMinerals} minerals  {MineralBar(info.BestMinerals, 23)}");
+            BoxLine($"  Epsilon  :  {info.Epsilon:F4}   (0 = pure exploit, 1 = random)");
+            BoxLine($"  States   :  {info.StatesKnown:N0}");
         }
-
-        WriteSeparator('═');
+        BoxBottom();
     }
 
-    // ── Main run ──────────────────────────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // Main run
+    // ═════════════════════════════════════════════════════════════════════════
 
     public void Run()
     {
-        // ── Header ─────────────────────────────────────────────────────────────
-        WriteSeparator('═');
-        WriteColored("  MARS ROVER — Q-LEARNING AGENT", ConsoleColor.Cyan);
-        WriteSeparator('═');
-        System.Console.WriteLine();
+        PrintBanner();
 
-        // ── Load map ───────────────────────────────────────────────────────────
-        WriteColored("▶ Loading map...", ConsoleColor.Yellow);
+        // ── Load map ──────────────────────────────────────────────────────────
         GameMap map;
         try
         {
@@ -71,192 +56,473 @@ public class ConsoleRunner
         }
         catch (Exception ex)
         {
-            WriteColored($"  ERROR loading map: {ex.Message}", ConsoleColor.Red);
+            BoxTop("  ERROR");
+            BoxLine($"  Could not load map: {ex.Message}", ConsoleColor.Red);
+            BoxBottom();
             return;
         }
 
-        WriteColored($"  Map:       {_cfg.MapPath}", ConsoleColor.Green);
-        System.Console.WriteLine($"  Grid:      {GameMap.Width}×{GameMap.Height}");
-        System.Console.WriteLine($"  Start:     ({map.StartX}, {map.StartY})");
-        System.Console.WriteLine($"  Minerals:  {map.RemainingMinerals.Count}");
-        System.Console.WriteLine($"  Duration:  {_cfg.Hours}h = {_cfg.Hours * 2} ticks");
-        System.Console.WriteLine($"  Episodes:  {_cfg.Episodes}");
-        System.Console.WriteLine($"  Model:     {_cfg.ModelPath}.qtable.json");
-        System.Console.WriteLine();
+        // ── Mission card ──────────────────────────────────────────────────────
+        PrintMissionCard(map);
 
-        // ── Resume prompt ──────────────────────────────────────────────────────
+        // ── Check for saved model ─────────────────────────────────────────────
         var simRunner  = new SimulationRunner(map, _cfg.Hours, _cfg.ModelPath);
         var savedModel = simRunner.GetModelInfo();
-        bool skipTrain = false;
 
-        if (savedModel != null)
-        {
-            WriteSeparator('─');
-            WriteColored("  SAVED MODEL FOUND", ConsoleColor.Cyan);
-            System.Console.WriteLine($"  Episodes completed:  {savedModel.EpisodesCompleted:N0}");
-            System.Console.WriteLine($"  Best result:         {savedModel.BestMinerals} minerals");
-            System.Console.WriteLine($"  Epsilon:             {savedModel.Epsilon:F4}");
-            System.Console.WriteLine($"  States known:        {savedModel.StatesKnown:N0}");
-            System.Console.WriteLine($"  Saved at:            {FormatDate(savedModel.SavedAt)}");
-            WriteSeparator('─');
-            System.Console.WriteLine();
-            System.Console.Write("  [T] Train more    [R] Run only    [Q] Quit  → ");
-            System.Console.ForegroundColor = ConsoleColor.White;
+        // ── Main menu ─────────────────────────────────────────────────────────
+        var choice = ShowMainMenu(savedModel);
+        if (choice == MenuChoice.Quit) return;
 
-            while (true)
-            {
-                var key = System.Console.ReadKey(intercept: true).Key;
-                if (key == ConsoleKey.T) { System.Console.WriteLine("Train"); break; }
-                if (key == ConsoleKey.R) { System.Console.WriteLine("Run only"); skipTrain = true; break; }
-                if (key == ConsoleKey.Q) { System.Console.WriteLine("Quit"); return; }
-            }
-            System.Console.ResetColor();
-            System.Console.WriteLine();
-        }
+        bool skipTrain = (choice == MenuChoice.RunOnly);
 
-        // ── Training ───────────────────────────────────────────────────────────
+        // ── Training ──────────────────────────────────────────────────────────
         if (!skipTrain)
         {
-            WriteSeparator('─');
-            WriteColored(savedModel != null ? "▶ RESUMING TRAINING" : "▶ TRAINING",
-                         ConsoleColor.Yellow);
-            WriteSeparator('─');
-
-            int    bestSoFar  = savedModel?.BestMinerals ?? 0;
-            var    trainStart = DateTime.Now;
-
-            simRunner.Train(_cfg.Episodes, progress =>
-            {
-                int    filled = (int)((double)progress.Episode / progress.TotalEps * BarWidth);
-                string bar    = new string('█', filled) + new string('░', BarWidth - filled);
-                double elapsed = (DateTime.Now - trainStart).TotalSeconds;
-                double eta     = progress.Episode > 0
-                                 ? elapsed / progress.Episode * (progress.TotalEps - progress.Episode)
-                                 : 0;
-
-                if (progress.BestMinerals > bestSoFar)
-                {
-                    bestSoFar = progress.BestMinerals;
-                    System.Console.WriteLine();
-                    WriteColored(
-                        $"  ★ New best: {bestSoFar} minerals  (ep {progress.Episode})",
-                        ConsoleColor.Green);
-                }
-
-                System.Console.Write(
-                    $"\r  [{bar}] {progress.Episode}/{progress.TotalEps}" +
-                    $"  ε={progress.Epsilon:F3}" +
-                    $"  best={progress.BestMinerals}⛏" +
-                    $"  states={progress.StatesKnown}" +
-                    $"  ETA {eta:F0}s  ");
-            });
-
-            System.Console.WriteLine();
-            System.Console.WriteLine();
-            double trainSecs = (DateTime.Now - trainStart).TotalSeconds;
-            WriteColored($"  Training complete in {trainSecs:F1}s.", ConsoleColor.Green);
-            WriteColored($"  Best minerals during training: {bestSoFar}", ConsoleColor.Green);
-            System.Console.WriteLine();
+            RunTraining(simRunner, savedModel);
         }
 
-        // ── Deployment simulation ──────────────────────────────────────────────
-        WriteSeparator('─');
-        WriteColored("▶ RUNNING SIMULATION (epsilon=0, pure exploitation)", ConsoleColor.Yellow);
-        WriteSeparator('─');
+        // ── Deployment ────────────────────────────────────────────────────────
+        Ln();
+        BoxTop("  MISSION DEPLOYMENT  —  epsilon = 0  (pure exploitation)");
+        BoxLine("  Launching rover with best learned policy...", ConsoleColor.Yellow);
+        BoxBottom();
+        Ln();
 
         var log = simRunner.RunSimulation();
 
-        // ── Tick-by-tick log ───────────────────────────────────────────────────
-        System.Console.WriteLine();
-        System.Console.WriteLine(
-            $"  {"Tick",-5} {"Sol",-4} {"Time",-8} {"Phase",-6} {"Pos",-10} {"Batt",-7} {"Minerals",-9} Event");
-        System.Console.WriteLine($"  {new string('─', 72)}");
+        PrintTickLog(log);
 
-        int lastMinerals = 0;
-        foreach (var entry in log)
-        {
-            bool newMineral = entry.TotalMinerals > lastMinerals;
-            lastMinerals    = entry.TotalMinerals;
+        // ── Summary ───────────────────────────────────────────────────────────
+        PrintMissionSummary(log, map);
 
-            string pos      = $"({entry.X},{entry.Y})";
-            string batt     = $"{entry.Battery:F0}%";
-            string phase    = entry.Phase[..Math.Min(6, entry.Phase.Length)];
-            string daymark  = entry.IsDay ? "☀" : "🌑";
-            string time     = $"{daymark}{entry.HourOfSol:F1}h";
-            string minerals = $"B{entry.MineralsB}/Y{entry.MineralsY}/G{entry.MineralsG}";
-
-            if (newMineral)
-                System.Console.ForegroundColor = ConsoleColor.Green;
-            else if (entry.Battery < 10)
-                System.Console.ForegroundColor = ConsoleColor.Red;
-            else if (entry.Battery < 25)
-                System.Console.ForegroundColor = ConsoleColor.Yellow;
-            else
-                System.Console.ForegroundColor = ConsoleColor.Gray;
-
-            System.Console.WriteLine(
-                $"  {entry.Tick,-5} {entry.Sol,-4} {time,-8} {phase,-6} {pos,-10} {batt,-7} {minerals,-9} {entry.EventNote}");
-            System.Console.ResetColor();
-        }
-
-        // ── Final summary ──────────────────────────────────────────────────────
-        System.Console.WriteLine();
-        WriteSeparator('═');
-        WriteColored("  MISSION SUMMARY", ConsoleColor.Cyan);
-        WriteSeparator('─');
-
-        if (log.Count == 0)
-        {
-            WriteColored("  No simulation data.", ConsoleColor.Red);
-        }
-        else
-        {
-            var last  = log[^1];
-            bool home  = last.X == map.StartX && last.Y == map.StartY;
-            bool alive = last.Battery > 0;
-
-            System.Console.WriteLine(
-                $"  Total minerals:  {last.TotalMinerals}  " +
-                $"(Blue={last.MineralsB}, Yellow={last.MineralsY}, Green={last.MineralsG})");
-            System.Console.WriteLine($"  Final battery:   {last.Battery:F1}%");
-            System.Console.WriteLine($"  Ticks used:      {last.Tick}/{_cfg.Hours * 2}");
-            System.Console.WriteLine($"  Returned home:   {(home  ? "✓ YES" : "✗ NO")}");
-            System.Console.WriteLine($"  Rover survived:  {(alive ? "✓ YES" : "✗ NO")}");
-            System.Console.WriteLine($"  Distance trav.:  {last.DistanceTraveled:F0} cells");
-            System.Console.WriteLine();
-
-            if (home && alive)
-                WriteColored($"  ✅ MISSION SUCCESS — {last.TotalMinerals} minerals collected",
-                             ConsoleColor.Green);
-            else if (!alive)
-                WriteColored("  ❌ MISSION FAILED — battery died", ConsoleColor.Red);
-            else
-                WriteColored("  ⚠  MISSION INCOMPLETE — rover did not return home",
-                             ConsoleColor.Yellow);
-        }
-
-        WriteSeparator('═');
-
-        // ── Auto-save run log ──────────────────────────────────────────────────
+        // ── Save log ──────────────────────────────────────────────────────────
         var savedPath = RunLogger.Save(log, _cfg, map);
         if (savedPath != null)
         {
-            System.Console.WriteLine();
-            WriteColored($"  💾 Run log saved → {savedPath}", ConsoleColor.DarkGray);
+            Ln();
+            Col(ConsoleColor.DarkCyan);
+            System.Console.WriteLine($"   ──  Run log saved  →  {savedPath}");
+            Reset();
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // Banner
+    // ═════════════════════════════════════════════════════════════════════════
 
-    private static void WriteSeparator(char ch)
-        => System.Console.WriteLine(new string(ch, 60));
-
-    private static void WriteColored(string text, ConsoleColor color)
+    private static void PrintBanner()
     {
-        System.Console.ForegroundColor = color;
-        System.Console.WriteLine(text);
-        System.Console.ResetColor();
+        System.Console.Clear();
+        Ln();
+        Col(ConsoleColor.DarkRed);
+        System.Console.WriteLine(@"   ██████   ██████  ██    ██ ███████ ██████");
+        System.Console.WriteLine(@"   ██   ██ ██    ██ ██    ██ ██      ██   ██");
+        System.Console.WriteLine(@"   ██████  ██    ██ ██    ██ █████   ██████");
+        System.Console.WriteLine(@"   ██   ██ ██    ██  ██  ██  ██      ██   ██");
+        System.Console.WriteLine(@"   ██   ██  ██████    ████   ███████ ██   ██");
+        Reset();
+        Ln();
+        Col(ConsoleColor.Red);
+        System.Console.WriteLine(@"   ·· D A S H B O A R D  ·  Q - L E A R N I N G  A G E N T ··");
+        Reset();
+        System.Console.WriteLine($"   {"".PadRight(W - 4, '─')}");
+        Ln();
     }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Mission card
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void PrintMissionCard(GameMap map)
+    {
+        BoxTop("  MISSION PARAMETERS");
+        BoxLine($"  Map        :  {_cfg.MapPath}");
+        BoxLine($"  Grid       :  {GameMap.Width} × {GameMap.Height}");
+        BoxLine($"  Start pos  :  ({map.StartX}, {map.StartY})");
+        BoxLine($"  Minerals   :  {map.RemainingMinerals.Count}  (Blue / Yellow / Green)");
+        BoxLine($"  Duration   :  {_cfg.Hours} hours  =  {_cfg.Hours * 2} ticks  (1 Martian sol)");
+        BoxLine($"  Episodes   :  {_cfg.Episodes}");
+        BoxLine($"  Model      :  {_cfg.ModelPath}.qtable.json");
+        BoxBottom();
+        Ln();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Main menu
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private enum MenuChoice { Train, RunOnly, Quit }
+
+    // ── Button definitions ────────────────────────────────────────────────────
+
+    private record Button(string Label, string Description, MenuChoice Choice, ConsoleColor Color);
+
+    private static MenuChoice ShowMainMenu(ModelInfo? savedModel)
+    {
+        if (savedModel != null)
+        {
+            BoxTop("  SAVED MODEL FOUND");
+            BoxLine($"  Episodes   :  {savedModel.EpisodesCompleted:N0}");
+            BoxLine($"  Best score :  {savedModel.BestMinerals} minerals  {MineralBar(savedModel.BestMinerals, 23)}");
+            BoxLine($"  Epsilon    :  {savedModel.Epsilon:F4}");
+            BoxLine($"  States     :  {savedModel.StatesKnown:N0}");
+            BoxLine($"  Saved at   :  {FormatDate(savedModel.SavedAt)}");
+            BoxBottom();
+            Ln();
+        }
+
+        // Build button list based on whether a saved model exists
+        var buttons = savedModel != null
+            ? new[]
+            {
+                new Button("  TRAIN MORE  ", "Train more episodes and improve the model",   MenuChoice.Train,   ConsoleColor.Yellow),
+                new Button("  RUN ONLY    ", "Deploy the saved policy now (skip training)", MenuChoice.RunOnly, ConsoleColor.Green),
+                new Button("  QUIT        ", "Exit the application",                        MenuChoice.Quit,    ConsoleColor.DarkGray),
+            }
+            : new[]
+            {
+                new Button("  TRAIN & RUN ", "Train the agent then deploy the best policy", MenuChoice.Train,   ConsoleColor.Yellow),
+                new Button("  QUIT        ", "Exit the application",                        MenuChoice.Quit,    ConsoleColor.DarkGray),
+            };
+
+        // Instruction header
+        System.Console.WriteLine($"   {"".PadRight(W - 4, '─')}");
+        Col(ConsoleColor.DarkGray);
+        System.Console.WriteLine("   SELECT AN ACTION   ←/→ or A/D to move   Enter to confirm");
+        Reset();
+        System.Console.WriteLine($"   {"".PadRight(W - 4, '─')}");
+        Ln();
+
+        // Remember where the buttons start so we can redraw on navigation
+        int menuRow = System.Console.CursorTop;
+        int selected = 0;
+
+        while (true)
+        {
+            // Redraw all buttons at the fixed row
+            System.Console.SetCursorPosition(0, menuRow);
+            DrawButtonRow(buttons, selected);
+
+            var key = System.Console.ReadKey(intercept: true).Key;
+
+            switch (key)
+            {
+                case ConsoleKey.LeftArrow:
+                case ConsoleKey.A:
+                    selected = (selected - 1 + buttons.Length) % buttons.Length;
+                    break;
+
+                case ConsoleKey.RightArrow:
+                case ConsoleKey.D:
+                    selected = (selected + 1) % buttons.Length;
+                    break;
+
+                case ConsoleKey.Enter:
+                case ConsoleKey.Spacebar:
+                    Ln(); Ln();
+                    Col(ConsoleColor.White);
+                    System.Console.WriteLine($"   ▶  {buttons[selected].Label.Trim()}");
+                    Reset();
+                    Ln();
+                    return buttons[selected].Choice;
+
+                // Also keep letter shortcuts as fallback
+                case ConsoleKey.T:
+                    Ln(); Ln();
+                    Col(ConsoleColor.White);
+                    System.Console.WriteLine($"   ▶  {buttons[0].Label.Trim()}");
+                    Reset(); Ln();
+                    return MenuChoice.Train;
+
+                case ConsoleKey.R when savedModel != null:
+                    Ln(); Ln();
+                    Col(ConsoleColor.White);
+                    System.Console.WriteLine("   ▶  RUN ONLY");
+                    Reset(); Ln();
+                    return MenuChoice.RunOnly;
+
+                case ConsoleKey.Q:
+                case ConsoleKey.Escape:
+                    Ln(); Ln();
+                    Col(ConsoleColor.White);
+                    System.Console.WriteLine("   ▶  QUIT");
+                    Reset(); Ln();
+                    return MenuChoice.Quit;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Draws all buttons on one row. The selected button is highlighted with a
+    /// filled background-style border; others are dimmed.
+    /// </summary>
+    private static void DrawButtonRow(Button[] buttons, int selected)
+    {
+        // Row 1: top border
+        System.Console.Write("   ");
+        for (int i = 0; i < buttons.Length; i++)
+        {
+            bool active = i == selected;
+            Col(active ? buttons[i].Color : ConsoleColor.DarkGray);
+            int w = buttons[i].Label.Length + 2;
+            System.Console.Write("╔" + new string('═', w) + "╗");
+            Reset();
+            System.Console.Write("   ");
+        }
+        Ln();
+
+        // Row 2: label
+        System.Console.Write("   ");
+        for (int i = 0; i < buttons.Length; i++)
+        {
+            bool active = i == selected;
+            Col(active ? buttons[i].Color : ConsoleColor.DarkGray);
+            System.Console.Write("║ ");
+            if (active)
+            {
+                Col(ConsoleColor.White);
+                System.Console.Write(buttons[i].Label);
+                Col(buttons[i].Color);
+            }
+            else
+            {
+                System.Console.Write(buttons[i].Label);
+            }
+            System.Console.Write(" ║");
+            Reset();
+            System.Console.Write("   ");
+        }
+        Ln();
+
+        // Row 3: bottom border
+        System.Console.Write("   ");
+        for (int i = 0; i < buttons.Length; i++)
+        {
+            bool active = i == selected;
+            Col(active ? buttons[i].Color : ConsoleColor.DarkGray);
+            int w = buttons[i].Label.Length + 2;
+            System.Console.Write("╚" + new string('═', w) + "╝");
+            Reset();
+            System.Console.Write("   ");
+        }
+        Ln();
+        Ln();
+
+        // Row 4: description of selected button
+        Col(ConsoleColor.DarkGray);
+        string desc = buttons[selected].Description;
+        System.Console.WriteLine("   " + desc.PadRight(W - 4));
+        Reset();
+        Ln();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Training
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void RunTraining(SimulationRunner simRunner, ModelInfo? savedModel)
+    {
+        BoxTop(savedModel != null ? "  RESUMING TRAINING" : "  TRAINING");
+        BoxLine($"  Running {_cfg.Episodes} episodes on {System.Environment.ProcessorCount} threads...",
+                ConsoleColor.Yellow);
+        BoxBottom();
+        Ln();
+
+        int    bestSoFar  = savedModel?.BestMinerals ?? 0;
+        var    trainStart = DateTime.Now;
+        const int barW    = 36;
+
+        simRunner.Train(_cfg.Episodes, progress =>
+        {
+            double elapsed = (DateTime.Now - trainStart).TotalSeconds;
+            double eta     = progress.Episode > 0
+                             ? elapsed / progress.Episode * (progress.TotalEps - progress.Episode)
+                             : 0;
+
+            if (progress.BestMinerals > bestSoFar)
+            {
+                bestSoFar = progress.BestMinerals;
+                // Print new-best on its own permanent line
+                System.Console.Write("\r" + new string(' ', W) + "\r");
+                Col(ConsoleColor.Green);
+                System.Console.WriteLine(
+                    $"   ★  New best: {bestSoFar} minerals   {MineralBar(bestSoFar, 23)}" +
+                    $"   ep {progress.Episode}");
+                Reset();
+            }
+
+            int    filled  = (int)((double)progress.Episode / progress.TotalEps * barW);
+            string bar     = new string('█', filled) + new string('░', barW - filled);
+            string line    =
+                $"\r   [{bar}]  {progress.Episode}/{progress.TotalEps}" +
+                $"   ε {progress.Epsilon:F3}" +
+                $"   ⛏ {progress.BestMinerals}" +
+                $"   ETA {eta:F0}s   ";
+
+            System.Console.Write(line);
+        });
+
+        System.Console.Write("\r" + new string(' ', W) + "\r");
+        double secs = (DateTime.Now - trainStart).TotalSeconds;
+
+        BoxTop("  TRAINING COMPLETE");
+        BoxLine($"  Time elapsed  :  {secs:F1}s");
+        BoxLine($"  Best result   :  {bestSoFar} minerals   {MineralBar(bestSoFar, 23)}",
+                ConsoleColor.Green);
+        BoxBottom();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Tick log
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private static void PrintTickLog(List<SimulationLogEntry> log)
+    {
+        Col(ConsoleColor.DarkGray);
+        System.Console.WriteLine(
+            $"   {"TICK",-5} {"TIME",-9} {"PHASE",-11} {"POS",-10} {"BATTERY",-9} {"TOTAL",-6} EVENT");
+        System.Console.WriteLine($"   {"".PadRight(W - 4, '─')}");
+        Reset();
+
+        int lastMinerals = 0;
+        foreach (var e in log)
+        {
+            bool newMineral = e.TotalMinerals > lastMinerals;
+            lastMinerals    = e.TotalMinerals;
+
+            string tick    = $"{e.Tick}";
+            string day     = e.IsDay ? "☀ DAY " : "🌑 NGT";
+            string time    = $"{day} {e.HourOfSol:F1}h";
+            string phase   = e.Phase.PadRight(10);
+            string pos     = $"({e.X,2},{e.Y,2})";
+            string batt    = $"{e.Battery,5:F1}%  {BatteryBar(e.Battery, 10)}";
+            string total   = $"⛏ {e.TotalMinerals}";
+
+            ConsoleColor col =
+                newMineral        ? ConsoleColor.Green  :
+                e.Battery < 10    ? ConsoleColor.Red    :
+                e.Battery < 25    ? ConsoleColor.Yellow :
+                                    ConsoleColor.Gray;
+
+            Col(col);
+            System.Console.WriteLine(
+                $"   {tick,-5} {time,-9} {phase,-11} {pos,-10} {batt,-18} {total,-6} {e.EventNote}");
+            Reset();
+        }
+
+        Ln();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Mission summary
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void PrintMissionSummary(List<SimulationLogEntry> log, GameMap map)
+    {
+        BoxTop("  MISSION SUMMARY");
+
+        if (log.Count == 0)
+        {
+            BoxLine("  No simulation data.", ConsoleColor.Red);
+            BoxBottom();
+            return;
+        }
+
+        var  last  = log[^1];
+        bool home  = last.X == map.StartX && last.Y == map.StartY;
+        bool alive = last.Battery > 0;
+
+        BoxLine($"  Minerals      :  {last.TotalMinerals}   " +
+                $"Blue {last.MineralsB}  ·  Yellow {last.MineralsY}  ·  Green {last.MineralsG}");
+        BoxLine($"  Battery left  :  {last.Battery:F1}%   {BatteryBar(last.Battery, 20)}");
+        BoxLine($"  Ticks used    :  {last.Tick} / {_cfg.Hours * 2}");
+        BoxLine($"  Distance      :  {last.DistanceTraveled:F0} cells");
+        BoxLine($"  Returned home :  {(home  ? "YES ✓" : "NO  ✗")}",
+                home  ? ConsoleColor.Green : ConsoleColor.Red);
+        BoxLine($"  Survived      :  {(alive ? "YES ✓" : "NO  ✗")}",
+                alive ? ConsoleColor.Green : ConsoleColor.Red);
+
+        Ln();
+        if (home && alive)
+        {
+            BoxLine($"  ✅  MISSION SUCCESS  —  {last.TotalMinerals} minerals collected",
+                    ConsoleColor.Green);
+            BoxLine($"      {MineralBar(last.TotalMinerals, 23, wide: true)}",
+                    ConsoleColor.Green);
+        }
+        else if (!alive)
+            BoxLine("  ❌  MISSION FAILED  —  battery died", ConsoleColor.Red);
+        else
+            BoxLine("  ⚠   MISSION INCOMPLETE  —  rover did not return home", ConsoleColor.Yellow);
+
+        BoxBottom();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Box drawing helpers
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private static void BoxTop(string title)
+    {
+        Col(ConsoleColor.DarkCyan);
+        System.Console.WriteLine($"   ╔{"".PadRight(W - 5, '═')}╗");
+        System.Console.Write($"   ║");
+        Reset();
+        Col(ConsoleColor.Cyan);
+        System.Console.Write(title.PadRight(W - 5));
+        Col(ConsoleColor.DarkCyan);
+        System.Console.WriteLine("║");
+        System.Console.WriteLine($"   ╠{"".PadRight(W - 5, '═')}╣");
+        Reset();
+    }
+
+    private static void BoxLine(string text, ConsoleColor textColor = ConsoleColor.Gray)
+    {
+        Col(ConsoleColor.DarkCyan);
+        System.Console.Write("   ║ ");
+        Col(textColor);
+        System.Console.Write(text.PadRight(W - 7));
+        Col(ConsoleColor.DarkCyan);
+        System.Console.WriteLine(" ║");
+        Reset();
+    }
+
+    private static void BoxBottom()
+    {
+        Col(ConsoleColor.DarkCyan);
+        System.Console.WriteLine($"   ╚{"".PadRight(W - 5, '═')}╝");
+        Reset();
+        Ln();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Visual bar helpers
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Small mineral progress bar: ████░░░░ (max 23 minerals)</summary>
+    private static string MineralBar(int minerals, int max, bool wide = false)
+    {
+        int len    = wide ? 23 : 12;
+        int filled = (int)Math.Round((double)minerals / max * len);
+        filled     = Math.Clamp(filled, 0, len);
+        return "[" + new string('█', filled) + new string('░', len - filled) + "]";
+    }
+
+    /// <summary>Compact battery bar.</summary>
+    private static string BatteryBar(double pct, int len)
+    {
+        int filled = (int)Math.Round(pct / 100.0 * len);
+        filled     = Math.Clamp(filled, 0, len);
+        return "[" + new string('█', filled) + new string('░', len - filled) + "]";
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Console helpers
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private static void Col(ConsoleColor c) => System.Console.ForegroundColor = c;
+    private static void Reset()             => System.Console.ResetColor();
+    private static void Ln()               => System.Console.WriteLine();
 
     private static string FormatDate(string iso)
     {
