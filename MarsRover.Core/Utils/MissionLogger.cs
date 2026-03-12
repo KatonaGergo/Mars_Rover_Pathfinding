@@ -96,7 +96,7 @@ public static class MissionLogger
 
         w.WriteLine($"  ★  {resultLine}");
         w.WriteLine();
-        w.WriteLine($"  Minerals    {last.TotalMinerals,3}  {Bar(last.TotalMinerals, 23, 23)}  of 23 theoretical max");
+        w.WriteLine($"  Minerals    {last.TotalMinerals,3}  {Bar(last.TotalMinerals, 23, 23)}");
         w.WriteLine($"  Battery     {last.Battery,5:F1}%  {Bar((int)last.Battery, 100, 23)}");
         w.WriteLine($"  Ticks used  {last.Tick,3} / {hours * 2}");
         w.WriteLine($"  Distance    {last.DistanceTraveled:F0} cells traversed");

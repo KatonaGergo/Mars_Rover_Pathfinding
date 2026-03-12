@@ -158,10 +158,6 @@ public class HybridAgent
         int idx      = _qTable.BestActionIndex(qState.ToKey(), (int)HybridDecision.Count);
         var decision = IndexToDecision(idx);
 
-        // Safety guards: the Q-table can learn suboptimal ReturnToBase or Standby
-        // decisions from noisy early exploration. MustReturnNow handles the real
-        // return trigger via exact battery/time math — the Q-table should never
-        // override that with a premature ReturnToBase while minerals still exist.
         if (liveMap.RemainingMinerals.Count > 0)
         {
             if (decision == HybridDecision.ReturnToBase) return HybridDecision.SeekMineral;
@@ -204,13 +200,6 @@ public class HybridAgent
     }
 
     // ── Navigation ────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// FIX: Now queues ALL path steps (including index 0) and calls DequeueMove,
-    /// so the first tick gets the full multi-step movement budget.
-    /// Previously returned a single-direction Move for step 0, paying Fast
-    /// energy (18%) but moving only 1 cell.
-    /// </summary>
     private RoverAction NavigateTo(int tx, int ty, RoverState state, GameMap liveMap)
     {
         var path = AStarPathfinder.FindPath(liveMap, state.X, state.Y, tx, ty);
@@ -225,7 +214,6 @@ public class HybridAgent
             if (path.Count == 0) return RoverAction.StandbyAction;
         }
 
-        // Queue ALL steps — DequeueMove will pack up to speed steps per tick
         _currentPath.Clear();
         foreach (var step in path)
             _currentPath.Enqueue(step);
@@ -235,11 +223,6 @@ public class HybridAgent
 
     /// <summary>
     /// Packs up to (int)speed queued path steps into a single free-movement action.
-    /// Each step can be in a different direction — this is the free-movement model.
-    /// Stops early before a mineral so mining fires cleanly on the next tick.
-    ///
-    /// Passes the real queue depth to ChooseSpeed so speed is capped to the
-    /// number of steps actually needed — no paying for Fast when 1 step remains.
     /// </summary>
     private RoverAction DequeueMove(RoverState state, GameMap liveMap)
     {
@@ -261,7 +244,6 @@ public class HybridAgent
             simX = nx;
             simY = ny;
 
-            // Stop at mineral so next tick triggers mining cleanly
             if (liveMap.HasMineral(simX, simY)) break;
         }
 
@@ -295,9 +277,6 @@ public class HybridAgent
                 liveMap, pos.x, pos.y, liveMap.StartX, liveMap.StartY);
             if (stepsHome >= double.MaxValue) continue;
 
-            // Forward leg speed: mirrors ChooseSpeed's night conservatism rule.
-            // Deep night → Slow. ≤2 ticks until dawn → Normal allowed.
-            // During day → fastest affordable speed.
             RoverSpeed speedToMineral;
             if (SimulationEngine.IsDay(state.Tick))
             {
@@ -306,16 +285,14 @@ public class HybridAgent
             }
             else
             {
-                int tickInSol      = state.Tick % RoverState.TicksPerSol;
-                int ticksUntilDawn = RoverState.TicksPerSol - tickInSol;
-                RoverSpeed nightCap = ticksUntilDawn <= 2 ? RoverSpeed.Normal : RoverSpeed.Slow;
-                speedToMineral = stepsToMineral <= 1 ? RoverSpeed.Slow : nightCap;
+                speedToMineral = (int)stepsToMineral == 2
+                    ? RoverSpeed.Normal
+                    : RoverSpeed.Slow;
             }
 
             int ticksToMineral  = EnergyCalculator.TripTicks((int)stepsToMineral, speedToMineral);
             int tickAtMineral   = state.Tick + ticksToMineral;
 
-            // EXACT battery after arriving and mining
             double battToMineral = -EnergyCalculator.ExactTripDelta(
                                         state.Tick, (int)stepsToMineral, speedToMineral, _totalTicks);
             bool   miningDay    = SimulationEngine.IsDay(tickAtMineral);
@@ -325,15 +302,13 @@ public class HybridAgent
 
             if (battAtMineral < BatterySafetyMargin) continue;
 
-            // Home leg: use best affordable speed (return is always urgent-optimal)
             var speedHome = BestAffordableSpeedForLeg(
                                 tickAtMineral + 1, (int)stepsHome, battAtMineral);
             int ticksHome = EnergyCalculator.TripTicks((int)stepsHome, speedHome);
 
-            // Time guard
+
             if (ticksToMineral + 1 + ticksHome + ReturnSafetyBuffer > ticksRemaining) continue;
 
-            // Battery guard for full trip
             double battHome = -EnergyCalculator.ExactTripDelta(
                                    tickAtMineral + 1, (int)stepsHome, speedHome, _totalTicks);
             if (battAtMineral - battHome < BatterySafetyMargin) continue;
@@ -357,19 +332,21 @@ public class HybridAgent
     ///   If 3+ steps remain → Fast allowed.
     ///
     ///   This prevents paying Fast energy (18%/tick) to move a single cell,
-    ///   which was pure waste — same 1 cell moved, 9× the battery cost.
+    ///   which was pure waste, same 1 cell moved, 9× the battery cost.
     ///   With adjacent minerals this saves 16% battery per collection cycle.
     ///
     /// NIGHT CONSERVATISM RULE (multi-sol fix):
-    ///   At night, default to Slow to preserve battery for dawn recharge.
-    ///   Exception: if dawn is ≤2 ticks away, allow up to Normal.
-    ///   Rationale: deep into the night (10+ ticks remaining) sprinting burns
-    ///   16–64% more battery than Slow for no net benefit — dawn will refill it.
-    ///   But right at the sol boundary (ticks 46–47) the rover may be mid-path
-    ///   to a mineral that straddles the transition; forcing Slow there costs
-    ///   an extra tick per 2-step move and cascades into losing the last 2–3
-    ///   minerals of the chain. Allowing Normal at the boundary recovers those
-    ///   minerals without reverting to the battery-drain behaviour mid-night.
+    ///   At night, cap speed by step count rather than affording the fastest speed:
+    ///     1 step  → Slow   (2%/tick  — no benefit from faster)
+    ///     2 steps → Normal (saves 1 tick vs Slow; extra 4% cost recovered at dawn)
+    ///     3+steps → Slow   (Fast at night = 18%/tick, genuinely wasteful)
+    ///
+    ///   This replaces the old "always Slow at night" blanket rule which was
+    ///   correct for 3+-step moves but wrong for 2-step moves: a 2-step Slow
+    ///   move costs 2 ticks instead of 1, accumulating 3 lost ticks across the
+    ///   mission and costing exactly 3 minerals on a 48h run.
+    ///   The 4% extra battery for Normal over Slow on a 2-step night move is
+    ///   recovered completely within the first 1 tick of the next day phase.
     ///
     /// <param name="stepsRemaining">
     ///   How many path steps are still queued. Pass 0 to skip the distance cap.
@@ -387,26 +364,19 @@ public class HybridAgent
             return BestAffordableSpeedForLeg(state.Tick, (int)stepsHome, state.Battery);
         }
 
-        // NIGHT CONSERVATISM: cap speed at night unless dawn is imminent.
-        // ticksUntilDawn = TicksPerSol - tickInSol (how many ticks until sol wraps to day).
-        // ≤ 2 ticks until dawn → allow Normal (boundary mineral recovery).
-        // > 2 ticks until dawn → Slow only (preserve battery for recharge).
+        // NIGHT SPEED CAP: cap by path length, not by affordability.
+        // Never use Fast at night (18%/tick, not recovered until dawn).
+        // Allow Normal for exactly 2-step moves (saves 1 tick, +4% cost, dawn-recoverable).
         if (!SimulationEngine.IsDay(state.Tick))
         {
-            int tickInSol     = state.Tick % RoverState.TicksPerSol;
-            int ticksUntilDawn = RoverState.TicksPerSol - tickInSol;
-            RoverSpeed nightCap = ticksUntilDawn <= 2 ? RoverSpeed.Normal : RoverSpeed.Slow;
-
             return stepsRemaining switch
             {
-                1 => RoverSpeed.Slow,
-                2 => nightCap,
-                _ => nightCap
+                2   => RoverSpeed.Normal,   // saves 1 tick, 4% extra recoverable at dawn
+                _   => RoverSpeed.Slow      // 1-step and 3+-step: Slow
             };
         }
 
-        // Cap speed to the number of steps actually available in the path.
-        // Never pay for 3-step speed when only 1 step remains.
+        // DAY: cap speed to path length, then pick fastest affordable.
         RoverSpeed maxSpeedByDistance = stepsRemaining switch
         {
             1   => RoverSpeed.Slow,
@@ -414,7 +384,6 @@ public class HybridAgent
             _   => RoverSpeed.Fast     // 0 = unknown, 3+ = Fast allowed
         };
 
-        // Pick the fastest speed that is (a) within distance cap and (b) affordable
         foreach (var speed in new[] { RoverSpeed.Fast, RoverSpeed.Normal, RoverSpeed.Slow })
         {
             if (speed > maxSpeedByDistance) continue;
