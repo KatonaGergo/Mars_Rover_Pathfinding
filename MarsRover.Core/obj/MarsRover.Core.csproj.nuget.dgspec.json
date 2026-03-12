@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Dári Andrea\\Desktop\\Mars\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj": {}
+    "C:\\Users\\zsolt\\Desktop\\11.F\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj": {}
   },
   "projects": {
-    "C:\\Users\\Dári Andrea\\Desktop\\Mars\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj": {
+    "C:\\Users\\zsolt\\Desktop\\11.F\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Dári Andrea\\Desktop\\Mars\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj",
+        "projectUniqueName": "C:\\Users\\zsolt\\Desktop\\11.F\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj",
         "projectName": "MarsRover.Core",
-        "projectPath": "C:\\Users\\Dári Andrea\\Desktop\\Mars\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj",
-        "packagesPath": "C:\\Users\\Dári Andrea\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Dári Andrea\\Desktop\\Mars\\Mars_Rover_Pathfinding\\MarsRover.Core\\obj\\",
+        "projectPath": "C:\\Users\\zsolt\\Desktop\\11.F\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj",
+        "packagesPath": "C:\\Users\\zsolt\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\zsolt\\Desktop\\11.F\\Mars_Rover_Pathfinding\\MarsRover.Core\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\Dári Andrea\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\zsolt\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -44,7 +44,7 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "10.0.100"
+        "SdkAnalysisLevel": "9.0.300"
       },
       "frameworks": {
         "net8.0": {
@@ -71,7 +71,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.103/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.305/PortableRuntimeIdentifierGraph.json"
         }
       }
     }
