@@ -47,7 +47,35 @@ if (wantsInfo)
     return 0;
 }
 
-// ── Normal run ────────────────────────────────────────────────────────────────
+// ── Boot screen ───────────────────────────────────────────────────────────────
+TerminalUI.RunLoadingScreen();
+
+// ── Main menu loop ────────────────────────────────────────────────────────────
+// SystemStatus loops back to the menu; StartMission or Exit break out.
+while (true)
+{
+    var choice = TerminalUI.RunMainMenu();
+
+    if (choice == MainMenuResult.Exit)
+        return 0;
+
+    if (choice == MainMenuResult.SystemStatus)
+    {
+        Console.BackgroundColor = ConsoleColor.Black;
+        Console.Clear();
+        Console.CursorVisible = true;
+        ConsoleRunner.PrintModelInfo(config.ModelPath);
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine("\n   Press any key to return to mission terminal...");
+        Console.ResetColor();
+        Console.ReadKey(intercept: true);
+        continue;
+    }
+
+    break;  // StartMission → fall through to ConsoleRunner
+}
+
+// ── Mission run ───────────────────────────────────────────────────────────────
 var runner = new ConsoleRunner(config);
 runner.Run();
 return 0;
