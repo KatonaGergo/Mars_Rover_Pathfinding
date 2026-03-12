@@ -1,0 +1,10 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MarsRover.UI.App">
+
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://MarsRover.UI/Assets/MarsTheme.axaml" />
+    </Application.Styles>
+
+</Application>
