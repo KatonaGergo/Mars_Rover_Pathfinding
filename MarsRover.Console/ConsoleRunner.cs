@@ -20,7 +20,14 @@ public class ConsoleRunner
 
     public static void PrintModelInfo(string modelPath)
     {
+<<<<<<< Updated upstream
         PrintBanner();
+=======
+        WriteSeparator('═');
+        WriteColored("  SAVED MODEL INFO", ConsoleColor.Cyan);
+        WriteSeparator('═');
+
+>>>>>>> Stashed changes
         var info = SimulationRunner.GetModelInfo(modelPath);
 
         BoxTop("  SAVED MODEL INFO");
