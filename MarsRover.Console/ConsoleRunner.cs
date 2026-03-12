@@ -182,7 +182,7 @@ public class ConsoleRunner
             : new[]
             {
                 new Button("  TRAIN & RUN ", "Train the agent then deploy the best policy", MenuChoice.Train,   ConsoleColor.Yellow),
-                new Button("  QUIT        ", "Exit the application",                        MenuChoice.Quit,    ConsoleColor.DarkGray),
+                new Button("  QUIT        ", "Exit the application",                        MenuChoice.Quit,    ConsoleColor.Yellow),
             };
 
         // Instruction header
