@@ -26,7 +26,7 @@ public class HybridAgent
     // ── Constants ─────────────────────────────────────────────────────────────
     private const int    ReturnSafetyBuffer  = 1;
     private const double BatterySafetyMargin = 3.0;
-    private const double DetourThreshold     = 4.0;
+    private const double DetourThreshold     = 6.0;
 
     // ── Fields ────────────────────────────────────────────────────────────────
     private readonly QTable  _qTable;
@@ -142,17 +142,41 @@ public class HybridAgent
             double distToMineral = liveMap.ChebyshevDistance(state.X, state.Y, pos.x, pos.y);
             if (distToMineral > DetourThreshold) continue;
 
+            double stepsToMineral = AStarPathfinder.PathCost(
+                liveMap, state.X, state.Y, pos.x, pos.y);
+            if (stepsToMineral >= double.MaxValue) continue;
+
             double returnSteps = AStarPathfinder.PathCost(
                 liveMap, pos.x, pos.y, liveMap.StartX, liveMap.StartY);
             if (returnSteps >= double.MaxValue) continue;
 
-            double totalCost = distToMineral + 1 + returnSteps;
-            if (totalCost + ReturnSafetyBuffer > ticksRemaining) continue;
+            // Use best affordable speed for each leg — same logic as PickBestMineral.
+            // Previously hardcoded Slow for both legs, which was far too pessimistic:
+            // the rover was rejecting reachable detours because Slow's battery math
+            // said they were unaffordable when Normal or Fast actually had plenty of margin.
+            var speedToMineral = BestAffordableSpeedForLeg(
+                state.Tick, (int)stepsToMineral, state.Battery);
+            int ticksToMineral = EnergyCalculator.TripTicks((int)stepsToMineral, speedToMineral);
+            int tickAtMineral  = state.Tick + ticksToMineral;
 
-            double battToMineral = ExactBatteryCost(state.Tick, (int)distToMineral, RoverSpeed.Slow);
-            double battHome      = ExactBatteryCost(state.Tick + (int)distToMineral + 1,
-                                                     (int)returnSteps, RoverSpeed.Slow);
-            if (state.Battery - battToMineral - battHome >= BatterySafetyMargin)
+            double battToMineral = -EnergyCalculator.ExactTripDelta(
+                state.Tick, (int)stepsToMineral, speedToMineral, _totalTicks);
+            bool   miningDay   = SimulationEngine.IsDay(tickAtMineral);
+            double battMining  = EnergyCalculator.MiningDrain
+                                 - (miningDay ? EnergyCalculator.DayChargePerTick : 0);
+            double battAfterMine = state.Battery - battToMineral - battMining;
+
+            if (battAfterMine < BatterySafetyMargin) continue;
+
+            var speedHome  = BestAffordableSpeedForLeg(
+                tickAtMineral + 1, (int)returnSteps, battAfterMine);
+            int ticksHome  = EnergyCalculator.TripTicks((int)returnSteps, speedHome);
+
+            if (ticksToMineral + 1 + ticksHome + ReturnSafetyBuffer > ticksRemaining) continue;
+
+            double battHome = -EnergyCalculator.ExactTripDelta(
+                tickAtMineral + 1, (int)returnSteps, speedHome, _totalTicks);
+            if (battAfterMine - battHome >= BatterySafetyMargin)
                 return pos;
         }
         return null;

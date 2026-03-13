@@ -277,15 +277,37 @@ public class SimulationRunner
                     stateKey, decisionIdx, reward, nextQState.ToKey(), terminal));
             }
 
-            // Ghost record
-            var evt = collected              ? StepEvent.MineSuccess
-                    : engine.BatteryDead     ? StepEvent.BatteryDead
-                    : returnedHome           ? StepEvent.ReturnHome
-                    : newState.Battery < 5   ? StepEvent.BatteryCritical
-                    : newState.Battery < 20  ? StepEvent.BatteryLow
-                    : action.Type == RoverActionType.Standby ? StepEvent.Standby
-                    : StepEvent.Move;
-            steps.Add(new StepRecord(state.X, state.Y, evt, reward));
+            // Ghost record — expand multi-step moves into one record per cell
+            // so the replay trail shows every individual cell the rover visited,
+            // not just the tick start position (which skips 2 cells on Fast moves).
+            if (action.Type == RoverActionType.Move && action.Directions is { Count: > 1 })
+            {
+                int rx = state.X, ry = state.Y;
+                for (int s = 0; s < action.Directions.Count; s++)
+                {
+                    var (nx, ny) = episodeMap.ApplyDirection(rx, ry, action.Directions[s]);
+                    bool isLast  = s == action.Directions.Count - 1;
+                    var stepEvt  = isLast && collected    ? StepEvent.MineSuccess
+                                 : isLast && engine.BatteryDead  ? StepEvent.BatteryDead
+                                 : isLast && returnedHome ? StepEvent.ReturnHome
+                                 : isLast && newState.Battery < 5  ? StepEvent.BatteryCritical
+                                 : isLast && newState.Battery < 20 ? StepEvent.BatteryLow
+                                 : StepEvent.Move;
+                    steps.Add(new StepRecord(rx, ry, stepEvt, isLast ? reward : 0));
+                    rx = nx; ry = ny;
+                }
+            }
+            else
+            {
+                var evt = collected              ? StepEvent.MineSuccess
+                        : engine.BatteryDead     ? StepEvent.BatteryDead
+                        : returnedHome           ? StepEvent.ReturnHome
+                        : newState.Battery < 5   ? StepEvent.BatteryCritical
+                        : newState.Battery < 20  ? StepEvent.BatteryLow
+                        : action.Type == RoverActionType.Standby ? StepEvent.Standby
+                        : StepEvent.Move;
+                steps.Add(new StepRecord(state.X, state.Y, evt, reward));
+            }
 
             totalReward += reward;
         }
@@ -398,7 +420,30 @@ public class SimulationRunner
             var state  = engine.GetState();
             var action = agent.SelectAction(state, liveMap, isTraining: false);
             var entry  = engine.Step(action, agent.CurrentPhase.ToString());
-            if (entry != null) log.Add(entry);
+            if (entry == null) break;
+
+            // Expand multi-step moves into one log entry per cell so the
+            // map playback shows every individual cell the rover visited.
+            if (action.Type == RoverActionType.Move
+                && action.Directions is { Count: > 1 })
+            {
+                int rx = state.X, ry = state.Y;
+                for (int s = 0; s < action.Directions.Count; s++)
+                {
+                    var (nx, ny) = liveMap.ApplyDirection(rx, ry, action.Directions[s]);
+                    bool isLast  = s == action.Directions.Count - 1;
+                    // Intermediate cells share the tick's battery/mineral state.
+                    // Only the final cell gets the real entry data.
+                    log.Add(isLast ? entry with { X = nx, Y = ny }
+                                   : entry with { X = nx, Y = ny,
+                                                  EventNote = "" });
+                    rx = nx; ry = ny;
+                }
+            }
+            else
+            {
+                log.Add(entry);
+            }
         }
 
         return log;

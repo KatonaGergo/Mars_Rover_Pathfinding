@@ -51,7 +51,7 @@ public partial class MainViewModel : ObservableObject
 
     // ── Map + model path ─────────────────────────────────────────────────────
     [ObservableProperty] private GameMap? _gameMap;
-    private string _modelPath = "Q_model"; // base path — runner appends .weights.json / .meta.json
+    private string _modelPath = "dqn_model"; // base path — runner appends .weights.json / .meta.json
     private string _mapPath   = "";           // stored on map load — used for run log
     [ObservableProperty] private bool _hasSavedModel = false;
 
@@ -494,8 +494,32 @@ public partial class MainViewModel : ObservableObject
 
     // ── Ghost replay ─────────────────────────────────────────────────────────
 
+    private MarsRover.Core.Algorithm.EpisodeSnapshot? _pendingSnapshot;
+
     private void StartGhostReplay(MarsRover.Core.Algorithm.EpisodeSnapshot snap)
     {
+        // If a replay is currently running, queue the new snapshot and let the
+        // current one finish — the OnGhostTick end-handler will pick it up.
+        // This prevents the trail from restarting mid-episode every time a new
+        // best is found, which caused the replay to appear frozen.
+        if (_ghostTimer.IsEnabled && GhostTrail != null &&
+            GhostIndex < GhostTrail.Count)
+        {
+            _pendingSnapshot = snap;
+            // Still update the status label so the user sees the new best
+            GhostStatus = $"Episode {snap.Episode} | {snap.MineralsCollected} minerals | " +
+                          (snap.BatteryDied  ? "💀 Battery died" :
+                           snap.ReturnedHome ? "🏠 Returned home" : "⏱ Time up") +
+                          " (queued)";
+            return;
+        }
+
+        LoadSnapshot(snap);
+    }
+
+    private void LoadSnapshot(MarsRover.Core.Algorithm.EpisodeSnapshot snap)
+    {
+        _pendingSnapshot  = null;
         _ghostTimer.Stop();
         GhostTrail  = snap.Steps;
         GhostIndex  = 0;
@@ -510,8 +534,6 @@ public partial class MainViewModel : ObservableObject
             ShowGhostReplay   = true;
             ShowTrainingChart = false;
         }
-        // Always start timer — feeds GhostEventLog even if panel not visible.
-        // If user opens via 🧠 REPLAY mid-replay, they see live log immediately.
         _ghostTimer.Start();
     }
 
@@ -521,10 +543,20 @@ public partial class MainViewModel : ObservableObject
         if (trail == null || GhostIndex >= trail.Count)
         {
             _ghostTimer.Stop();
+
+            // If a better episode came in while we were playing, start it now
+            if (_pendingSnapshot != null)
+            {
+                var next = _pendingSnapshot;
+                Task.Delay(400).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
+                    LoadSnapshot(next)));
+                return;
+            }
+
             Task.Delay(600).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
             {
                 IsGhostMode = false;
-                if (!_userWantsToWatch) return; // user opened manually — keep panel open
+                if (!_userWantsToWatch) return;
                 ShowGhostReplay = false;
             }));
             return;
