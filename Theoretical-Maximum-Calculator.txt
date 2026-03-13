@@ -152,7 +152,7 @@ Lets run a data analysis!
   │  THEORETICAL MAXIMUM = 23 MINERALS      │
   └──────────────────────────────────────────┘
 ────────────────────────────────────────────────────────────────────────────────
-PART 5 — REAL MAP OPTIMUM: 21 MINERALS (corrected)
+PART 5 — REAL MAP OPTIMUM: 21 MINERALS
 ────────────────────────────────────────────────────────────────────────────────
 
   Map:    mars_map_50x50.csv
@@ -245,24 +245,92 @@ PART 5 — REAL MAP OPTIMUM: 21 MINERALS (corrected)
   │      not enough to reach any new mineral AND return home     │
   └──────────────────────────────────────────────────────────────┘
 
+────────────────────────────────────────────────────────────────────────────────
+PART 6 — REAL-MAP OPTIMUM: 95 MINERALS  (100h)
+────────────────────────────────────────────────────────────────────────────────
+
+  The 100h chain builds on the 48h chain. Minerals #1–#44 are identical.
+  After mineral #44 the rover continues into previously unreachable territory
+  across Sols 2 and 3.
+
+  ── Minerals #1–#44: identical to 48h chain ──────────────────────────────────
+
+  ── Minerals #45–#95: deep exploration ───────────────────────────────────────
+
+  #    Position    From        d    Ticks  Tick  Phase    Battery
+  ──   ─────────   ─────────   ─    ─────  ────  ──────   ───────
+  45   [45, 40]    [44, 41]    1    1      92    NIGHT    64.0%
+  46   [46, 41]    [45, 40]    1    1      94    NIGHT    60.0%
+  47   [47, 41]    [46, 41]    1    1      96    NIGHT    56.0%
+  48   [47, 40]    [47, 41]    1    1      98    DAY      72.0%
+  49   [46, 40]    [47, 40]    1    1      100   DAY      88.0%
+  50   [47, 42]    [46, 40]    2    1      102   DAY      98.0%
+  51   [46, 42]    [47, 42]    1    1      104   DAY      100%
+  52   [45, 42]    [46, 42]    1    1      106   DAY      100%
+  53   [43, 44]    [45, 42]    2    1      108   DAY      100%
+  54   [43, 45]    [43, 44]    1    1      110   DAY      100%
+  55   [42, 44]    [43, 45]    1    1      112   DAY      100%
+  56   [41, 44]    [42, 44]    1    1      114   DAY      100%
+  57   [42, 45]    [41, 44]    1    1      116   DAY      100%
+  58   [41, 45]    [42, 45]    1    1      118   DAY      100%
+  59   [35, 43]    [41, 45]    6    2      121   DAY      92.0%
+  60   [35, 42]    [35, 43]    1    1      123   DAY      100%
+  61   [34, 43]    [35, 42]    1    1      125   DAY      100%
+  62   [35, 44]    [34, 43]    1    1      127   DAY      100%
+  63   [34, 44]    [35, 44]    1    1      129   NIGHT    98%
+  64   [32, 43]    [34, 44]    2    1      131   NIGHT    88.0%
+  65   [32, 42]    [32, 43]    1    1      133   NIGHT    84.0%
+  66   [31, 43]    [32, 42]    1    1      135   NIGHT    80.0%
+  67   [31, 42]    [31, 43]    1    1      137   NIGHT    76.0%
+  68   [30, 41]    [31, 42]    1    1      139   NIGHT    72.0%
+  69   [29, 41]    [30, 41]    1    1      141   NIGHT    68.0%
+  70   [29, 40]    [29, 41]    1    1      143   NIGHT    64.0%
+  71   [28, 41]    [29, 40]    1    1      145   DAY      70.0%
+  72   [29, 42]    [28, 41]    1    1      147   DAY      86.0%
+  73   [29, 43]    [29, 42]    1    1      149   DAY      100%
+  74   [28, 43]    [29, 43]    1    1      151   DAY      100%
+  75   [29, 44]    [28, 43]    1    1      153   DAY      100%
+  76   [29, 45]    [29, 44]    1    1      155   DAY      100%
+  77   [28, 46]    [29, 45]    1    1      157   DAY      100%
+  78   [28, 45]    [28, 46]    1    1      159   DAY      100%
+  79   [28, 44]    [28, 45]    1    1      161   DAY      100%
+  80   [28, 42]    [28, 44]    2    1      163   DAY      100%
+  81   [28, 40]    [28, 42]    2    1      165   DAY      100%
+  82   [27, 39]    [28, 40]    1    1      167   DAY      100%
+  83   [26, 39]    [27, 39]    1    1      169   DAY      100%
+  84   [27, 38]    [26, 39]    1    1      171   DAY      100%
+  85   [26, 38]    [27, 38]    1    1      173   DAY      100%
+  86   [26, 37]    [26, 38]    1    1      175   DAY      100%
+  87   [30, 40]    [26, 37]    5    2      178   NIGHT    72.0%
+  88   [30, 42]    [30, 40]    2    1      180   NIGHT    62.0%
+  89   [30, 43]    [30, 42]    1    1      182   NIGHT    58.0%
+  90   [31, 44]    [30, 43]    1    1      184   NIGHT    54.0%
+  91   [31, 45]    [31, 44]    1    1      186   NIGHT    50.0%
+  92   [31, 46]    [31, 45]    1    1      188   NIGHT    46.0%
+  93   [30, 46]    [31, 46]    1    1      190   NIGHT    42.0%
+  94   [30, 45]    [30, 46]    1    1      192   NIGHT    38.0%
+  95   [30, 44]    [30, 45]    1    1      194   DAY      54.0%
+
+  After mineral #95: tick 194/200, battery 54%.
+  Return home: ~18 steps. Fast return = 6 ticks. Arrives tick 200/200.
+┌──────────────────────────────────────────────────────────────────────────┐
+  │  100h REAL-MAP OPTIMUM = 95 MINERALS                                    │
+  │  Physics ceiling = 99.  Gap of 4 caused by:                             │
+  │    - Multi-step travel to distant clusters (up to d=6 steps)            │
+  │    - Night phase battery drain across 4 sols                            │
+  │    - Final return from far corner (~18 steps) consuming 6 ticks         │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+
 
 ────────────────────────────────────────────────────────────────────────────────
-PART 6 — SUMMARY TABLE
+PART 7 — SUMMARY TABLE
 ────────────────────────────────────────────────────────────────────────────────
 
-  Scenario                                       Minerals   Valid?
-  ────────────────────────────────────────────   ────────   ──────
-  Physics ceiling (every mineral adjacent,          23       YES
-    infinite supply, perfect play)
-  Real map, greedy-optimal (OLD, buggy speed)       18       YES  (was wrong)
-  Real map, greedy-optimal (corrected speed)        21       YES
-  Our trained agent result                          21       YES
-  Agent vs real-map optimum                        100%      —
-  Agent vs physics ceiling                          91%      —
-
-  ╔══════════════════════════════════════════════════════════════╗
-  ║  The agent achieved the real-map optimum on the            ║
-  ║  competition map. SHADE THAT BOX IN!!!!                    ║
-  ╚══════════════════════════════════════════════════════════════╝
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  24h agent achieved the real-map optimum (21/21 = 100%).               ║
+  ║  48h real-map optimum:  44  (vs ceiling 47  — 93.6% efficiency)        ║
+  ║  100h real-map optimum: 95  (vs ceiling 99  — 95.9% efficiency)        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
 
 ================================================================================

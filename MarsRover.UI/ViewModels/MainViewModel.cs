@@ -51,8 +51,8 @@ public partial class MainViewModel : ObservableObject
 
     // ── Map + model path ─────────────────────────────────────────────────────
     [ObservableProperty] private GameMap? _gameMap;
-    private string _modelPath = "dqn_model";
-    private string _mapPath   = "Saved_Models/";
+    private string _modelPath = "dqn_model"; // base path — runner appends .weights.json / .meta.json
+    private string _mapPath   = "";           // stored on map load — used for run log
     [ObservableProperty] private bool _hasSavedModel = false;
 
     /// <summary>Set by MainWindow to open the native file picker.</summary>
@@ -107,7 +107,7 @@ public partial class MainViewModel : ObservableObject
     // Rolling average window for smoothed reward line
     private readonly Queue<double> _rewardWindow = new();
     private const    int           RewardWindowSize = 20;
-    private const    int           ChartUpdateInterval = 4;
+    private const    int           ChartUpdateInterval = 4;  // matches SimulationRunner.ParallelThreads (episodes per iteration)
 
     public MainViewModel()
     {
@@ -265,7 +265,7 @@ public partial class MainViewModel : ObservableObject
         if (GameMap == null) return;
 
         IsTraining       = true;
-        bool resuming    = File.Exists(_modelPath + ".qtable.json");
+        bool resuming    = File.Exists(SimulationRunner.ResolveModelPath(_modelPath) + ".qtable.json");
         TrainingStatus   = resuming
             ? "▶ Resuming Q-table training from saved model..."
             : "🧠 Training Hybrid Q-table agent...";
@@ -334,7 +334,7 @@ public partial class MainViewModel : ObservableObject
 
                     TrainingStatus = $"✅ Training complete — " +
                                      $"{training.BestMinerals} peak minerals | " +
-                                     $"Model saved to {_modelPath}.qtable.json" +
+                                     $"Model saved to {SimulationRunner.ResolveModelPath(_modelPath)}.qtable.json" +
                                      (logPath != null ? $" | Log → {logPath}" : "");
                     ResetDisplayToStart();
                 });
@@ -354,7 +354,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (PickFileAsync == null) return;
         // Use a save dialog — reuse PickFileAsync direction but guide user with status
-        TrainingStatus = $"Model saved at: {_modelPath}.weights.json";
+        TrainingStatus = $"Model saved at: {SimulationRunner.ResolveModelPath(_modelPath)}.qtable.json";
         await Task.CompletedTask;
     }
 
@@ -368,13 +368,13 @@ public partial class MainViewModel : ObservableObject
             if (path == null) return;
 
             // Strip extensions — user may select .weights.json or base name
-            _modelPath = path.Replace(".qtable.json", "").Replace(".meta.json", "");
-            _hasSavedModel = File.Exists(_modelPath + ".qtable.json");
+            _modelPath     = path.Replace(".qtable.json", "").Replace(".meta.json", "");
+            _hasSavedModel = File.Exists(SimulationRunner.ResolveModelPath(_modelPath) + ".qtable.json");
 
             TrainingStatus = _hasSavedModel
                 ? $"✅ Model loaded: {System.IO.Path.GetFileName(_modelPath)} — " +
                   $"click Train & Run to fine-tune or Run to deploy."
-                : $"⚠ No model weights found at {_modelPath}";
+                : $"⚠ No model weights found at {SimulationRunner.ResolveModelPath(_modelPath)}.qtable.json";
         }
         catch (Exception ex)
         {

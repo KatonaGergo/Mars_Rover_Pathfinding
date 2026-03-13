@@ -59,12 +59,26 @@ public class SimulationRunner
         _map           = map;
         _durationHours = durationHours;
         _totalTicks    = durationHours * 2;
-        _modelPath     = modelPath;
+
+        // Strip any pre-existing Saved_Models prefix so callers that already
+        // include it (e.g. LoadModel in the UI) don't double-nest the folder.
+        string baseName = Path.GetFileName(modelPath);
+        _modelPath = Path.Combine(SavedModelsDir, baseName);
     }
 
+    private const  string SavedModelsDir = "Saved_Models";
     private string QTablePath => _modelPath + ".qtable.json";
     private string MetaPath   => _modelPath + ".meta.json";
     public bool HasSavedModel => File.Exists(QTablePath);
+
+    /// <summary>
+    /// Normalises any model base-name or path to the canonical
+    /// Saved_Models/&lt;name&gt; form.  Used by the UI and Console so every
+    /// File.Exists check and display string stays in sync with where
+    /// SimulationRunner actually writes the files.
+    /// </summary>
+    public static string ResolveModelPath(string modelPath)
+        => Path.Combine(SavedModelsDir, Path.GetFileName(modelPath));
 
     // ── Training ──────────────────────────────────────────────────────────────
 
@@ -78,8 +92,16 @@ public class SimulationRunner
         Action<TrainingProgress>? onProgress = null)
     {
         // ── Load or create Q-table ────────────────────────────────────────────
-        var sharedTable = HasSavedModel ? QTable.Load(QTablePath) : new QTable();
-        double startEpsilon = HasSavedModel ? LoadMeta().Epsilon : 1.0;
+        // The Q-table values (the actual learned knowledge) are loaded from disk.
+        // Epsilon is NOT restored from the saved meta — a resumed run should
+        // re-explore at a moderate rate so it can improve on the existing table.
+        // Restoring the saved epsilon (typically 0.05 after a converged run)
+        // produces epsilonDecay = 1.0 for the entire run — the agent barely
+        // explores and the Q-table barely changes, making the resume pointless.
+        var sharedTable  = HasSavedModel ? QTable.Load(QTablePath) : new QTable();
+        double startEpsilon = HasSavedModel ? 0.4 : 1.0;
+        // Fresh run: 1.0 → 0.05 over N episodes (full exploration → convergence)
+        // Resume:    0.4 → 0.05 over N episodes (re-explore without throwing away knowledge)
 
         // Epsilon schedule: decays to 0.05 by final episode
         double epsilon      = startEpsilon;
@@ -202,7 +224,7 @@ public class SimulationRunner
         // Save the best checkpoint — the table that actually achieved bestMinerals
         // not the final table which may have been updated by worse later episodes
         var tableToSave = bestTable.StateCount > 0 ? bestTable : sharedTable;
-        SaveModel(tableToSave, epsilon, episodes, bestMinerals);
+        SaveModel(tableToSave, episodes, bestMinerals);
 
         return (new TrainingResult(episodes, bestMinerals, allRewards, sharedTable.StateCount),
                 tableToSave);
@@ -345,18 +367,24 @@ public class SimulationRunner
 
     // ── Live simulation ───────────────────────────────────────────────────────
 
+    // ── Live simulation ───────────────────────────────────────────────────────
+
     /// <summary>
-    /// Runs one deployment episode with epsilon=0 (pure exploitation).
-    /// Pass <paramref name="tableOverride"/> to use an in-memory table directly
-    /// (e.g. bestTable from just-finished training) instead of loading from disk.
-    /// This avoids any disk round-trip and guarantees the exact peak policy is used.
+    /// Runs one deployment pass with epsilon=0 (pure exploitation, no randomness).
+    ///
+    /// Exploration passes were tried here (ε=0.05 with isTraining=true) to try
+    /// to replicate lucky training episodes, but they bypassed the battery/time
+    /// safety guards in PickBestMineral — random decisions don't check feasibility
+    /// — causing the rover to miss the return window and die in the field.
+    /// The correct answer to "simulation scores lower than training best" is
+    /// more training episodes so the Q-table converges to the better policy.
     /// </summary>
     public List<SimulationLogEntry> RunSimulation(QTable? tableOverride = null)
     {
         var table = tableOverride
                     ?? (HasSavedModel ? QTable.Load(QTablePath) : new QTable());
 
-        var agent   = new HybridAgent(_map, _totalTicks, table, seed: 0);
+        var agent = new HybridAgent(_map, _totalTicks, table, seed: 0);
         agent.Epsilon = 0.0;
         agent.ResetNavigation();
 
@@ -416,9 +444,10 @@ public class SimulationRunner
     /// </summary>
     public static ModelInfo? GetModelInfo(string modelPath)
     {
+        // Normalise: strip any existing prefix then re-apply, same as constructor
         string baseName    = Path.GetFileName(modelPath);
         string resolvedPath = Path.Combine("Saved_Models", baseName);
- 
+
         string qtablePath = resolvedPath + ".qtable.json";
         string metaPath   = resolvedPath + ".meta.json";
 
@@ -443,19 +472,18 @@ public class SimulationRunner
             ModelPath:         modelPath,
             EpisodesCompleted: meta.EpisodesCompleted,
             BestMinerals:      meta.BestMinerals,
-            Epsilon:           meta.Epsilon,
+            Epsilon:           0.4, // resume epsilon — always resets to this, not saved
             SavedAt:           meta.SavedAt,
             StatesKnown:       stateCount);
     }
 
-    private void SaveModel(QTable table, double epsilon, int episodesCompleted, int bestMinerals)
+    private void SaveModel(QTable table, int episodesCompleted, int bestMinerals)
     {
+        Directory.CreateDirectory(SavedModelsDir);
         table.Save(QTablePath);
 
         var meta = new ModelMeta
         {
-            Epsilon           = epsilon,
-            EpsilonDecay      = 0.995,
             EpisodesCompleted = episodesCompleted,
             BestMinerals      = bestMinerals,
             SavedAt           = DateTime.UtcNow.ToString("o")
@@ -496,8 +524,6 @@ internal record EpisodeData(
 
 internal class ModelMeta
 {
-    public double Epsilon           { get; set; } = 1.0;
-    public double EpsilonDecay      { get; set; } = 0.995;
     public int    EpisodesCompleted { get; set; } = 0;
     public int    BestMinerals      { get; set; } = 0;
     public string SavedAt           { get; set; } = "";

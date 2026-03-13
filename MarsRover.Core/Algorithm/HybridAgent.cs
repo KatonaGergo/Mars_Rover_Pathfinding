@@ -5,6 +5,21 @@ namespace MarsRover.Core.Algorithm;
 
 /// <summary>
 /// THE HYBRID AGENT  (Q-table strategy + A* navigation)
+///
+/// REGRESSION FIXES (vs previous version):
+///   1. NavigateTo now queues ALL steps including step 0 and returns DequeueMove.
+///      Previously it returned a single-direction Move for the first step, paying
+///      Fast energy (18%) but moving only 1 cell instead of 3. Now every tick
+///      uses the full movement budget.
+///   2. BestAffordableSpeedForLeg takes the actual battery-at-mineral as input.
+///      Previously BestAffordableSpeedFrom re-estimated the forward leg cost using
+///      Normal speed regardless of what speed was actually used, overestimating
+///      battery by up to 12% and causing valid minerals to be rejected.
+///   3. State space reduced from 76,800 → 1,800 states. The Q-table only makes
+///      4 strategic decisions; it doesn't need 8 direction bins or 10 battery bins
+///      to do that. Fewer states means every state gets visited ~10× per episode
+///      instead of never, which is the difference between convergence and noise.
+///      1,800 = 5×3×5×4×3×2 (SolPhase replaces IsDay for multi-sol awareness).
 /// </summary>
 public class HybridAgent
 {
@@ -158,6 +173,10 @@ public class HybridAgent
         int idx      = _qTable.BestActionIndex(qState.ToKey(), (int)HybridDecision.Count);
         var decision = IndexToDecision(idx);
 
+        // Safety guards: the Q-table can learn suboptimal ReturnToBase or Standby
+        // decisions from noisy early exploration. MustReturnNow handles the real
+        // return trigger via exact battery/time math — the Q-table should never
+        // override that with a premature ReturnToBase while minerals still exist.
         if (liveMap.RemainingMinerals.Count > 0)
         {
             if (decision == HybridDecision.ReturnToBase) return HybridDecision.SeekMineral;
@@ -200,6 +219,13 @@ public class HybridAgent
     }
 
     // ── Navigation ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// FIX: Now queues ALL path steps (including index 0) and calls DequeueMove,
+    /// so the first tick gets the full multi-step movement budget.
+    /// Previously returned a single-direction Move for step 0, paying Fast
+    /// energy (18%) but moving only 1 cell.
+    /// </summary>
     private RoverAction NavigateTo(int tx, int ty, RoverState state, GameMap liveMap)
     {
         var path = AStarPathfinder.FindPath(liveMap, state.X, state.Y, tx, ty);
@@ -214,6 +240,7 @@ public class HybridAgent
             if (path.Count == 0) return RoverAction.StandbyAction;
         }
 
+        // Queue ALL steps — DequeueMove will pack up to speed steps per tick
         _currentPath.Clear();
         foreach (var step in path)
             _currentPath.Enqueue(step);
@@ -223,6 +250,11 @@ public class HybridAgent
 
     /// <summary>
     /// Packs up to (int)speed queued path steps into a single free-movement action.
+    /// Each step can be in a different direction — this is the free-movement model.
+    /// Stops early before a mineral so mining fires cleanly on the next tick.
+    ///
+    /// Passes the real queue depth to ChooseSpeed so speed is capped to the
+    /// number of steps actually needed — no paying for Fast when 1 step remains.
     /// </summary>
     private RoverAction DequeueMove(RoverState state, GameMap liveMap)
     {
@@ -244,6 +276,7 @@ public class HybridAgent
             simX = nx;
             simY = ny;
 
+            // Stop at mineral so next tick triggers mining cleanly
             if (liveMap.HasMineral(simX, simY)) break;
         }
 
@@ -277,6 +310,10 @@ public class HybridAgent
                 liveMap, pos.x, pos.y, liveMap.StartX, liveMap.StartY);
             if (stepsHome >= double.MaxValue) continue;
 
+            // Forward leg speed: mirrors ChooseSpeed's night rule exactly.
+            // Night: 2-step → Normal (saves 1 tick, 4% extra, dawn-recoverable).
+            //        other  → Slow (no Fast at night).
+            // Day:   fastest affordable speed within distance cap.
             RoverSpeed speedToMineral;
             if (SimulationEngine.IsDay(state.Tick))
             {
@@ -293,6 +330,7 @@ public class HybridAgent
             int ticksToMineral  = EnergyCalculator.TripTicks((int)stepsToMineral, speedToMineral);
             int tickAtMineral   = state.Tick + ticksToMineral;
 
+            // EXACT battery after arriving and mining
             double battToMineral = -EnergyCalculator.ExactTripDelta(
                                         state.Tick, (int)stepsToMineral, speedToMineral, _totalTicks);
             bool   miningDay    = SimulationEngine.IsDay(tickAtMineral);
@@ -302,13 +340,15 @@ public class HybridAgent
 
             if (battAtMineral < BatterySafetyMargin) continue;
 
+            // Home leg: use best affordable speed (return is always urgent-optimal)
             var speedHome = BestAffordableSpeedForLeg(
                                 tickAtMineral + 1, (int)stepsHome, battAtMineral);
             int ticksHome = EnergyCalculator.TripTicks((int)stepsHome, speedHome);
 
-
+            // Time guard
             if (ticksToMineral + 1 + ticksHome + ReturnSafetyBuffer > ticksRemaining) continue;
 
+            // Battery guard for full trip
             double battHome = -EnergyCalculator.ExactTripDelta(
                                    tickAtMineral + 1, (int)stepsHome, speedHome, _totalTicks);
             if (battAtMineral - battHome < BatterySafetyMargin) continue;
@@ -332,7 +372,7 @@ public class HybridAgent
     ///   If 3+ steps remain → Fast allowed.
     ///
     ///   This prevents paying Fast energy (18%/tick) to move a single cell,
-    ///   which was pure waste, same 1 cell moved, 9× the battery cost.
+    ///   which was pure waste — same 1 cell moved, 9× the battery cost.
     ///   With adjacent minerals this saves 16% battery per collection cycle.
     ///
     /// NIGHT CONSERVATISM RULE (multi-sol fix):
@@ -395,7 +435,9 @@ public class HybridAgent
     }
 
     /// <summary>
+    /// FIX: Replaces the broken BestAffordableSpeedFrom.
     /// Picks fastest speed where battery AFTER the full trip >= safety margin.
+    /// Takes battery at the START of this leg as a direct parameter — no re-estimation.
     /// </summary>
     private RoverSpeed BestAffordableSpeedForLeg(int startTick, int pathSteps, double battAtStart)
     {

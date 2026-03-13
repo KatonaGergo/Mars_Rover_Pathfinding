@@ -6,6 +6,14 @@ namespace MarsRover.Console;
 
 /// <summary>
 /// Terminal dashboard for the Mars Rover Q-learning agent.
+///
+/// FLOW:
+///   1. ASCII art banner + mission card
+///   2. Main menu — button-style keyboard navigation
+///   3. Training with live progress panel
+///   4. Deployment simulation with colour-coded tick log
+///   5. Mission summary card
+///   6. Auto-save run log to results/
 /// </summary>
 public class ConsoleRunner
 {
@@ -26,15 +34,14 @@ public class ConsoleRunner
         BoxTop("  SAVED MODEL INFO");
         if (info == null)
         {
-            BoxLine($"  No saved model at: {modelPath}.qtable.json", ConsoleColor.Yellow);
+            BoxLine($"  No saved model at: {SimulationRunner.ResolveModelPath(modelPath)}.qtable.json", ConsoleColor.Yellow);
         }
         else
         {
-            BoxLine($"  Path     :  {info.ModelPath}.qtable.json");
+            BoxLine($"  Path     :  {SimulationRunner.ResolveModelPath(info.ModelPath)}.qtable.json");
             BoxLine($"  Saved    :  {FormatDate(info.SavedAt)}");
             BoxLine($"  Episodes :  {info.EpisodesCompleted:N0}");
             BoxLine($"  Best     :  {info.BestMinerals} minerals  {MineralBar(info.BestMinerals, 23)}");
-            BoxLine($"  Epsilon  :  {info.Epsilon:F4}   (0 = pure exploit, 1 = random)");
             BoxLine($"  States   :  {info.StatesKnown:N0}");
         }
         BoxBottom();
@@ -142,7 +149,7 @@ public class ConsoleRunner
         BoxLine($"  Minerals   :  {map.RemainingMinerals.Count}  (Blue / Yellow / Green)");
         BoxLine($"  Duration   :  {_cfg.Hours} hours  =  {_cfg.Hours * 2} ticks  (1 Martian sol)");
         BoxLine($"  Episodes   :  {_cfg.Episodes}");
-        BoxLine($"  Model      :  {_cfg.ModelPath}.qtable.json");
+        BoxLine($"  Model      :  {SimulationRunner.ResolveModelPath(_cfg.ModelPath)}.qtable.json");
         BoxBottom();
         Ln();
     }
@@ -182,7 +189,7 @@ public class ConsoleRunner
             : new[]
             {
                 new Button("  TRAIN & RUN ", "Train the agent then deploy the best policy", MenuChoice.Train,   ConsoleColor.Yellow),
-                new Button("  QUIT        ", "Exit the application",                        MenuChoice.Quit,    ConsoleColor.Yellow),
+                new Button("  QUIT        ", "Exit the application",                        MenuChoice.Quit,    ConsoleColor.DarkGray),
             };
 
         // Instruction header
