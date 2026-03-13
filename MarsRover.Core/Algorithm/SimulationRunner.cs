@@ -49,7 +49,7 @@ public class SimulationRunner
     private const int    BatchSize        = 64;
     private const int    WarmupEpisodes   = 10;   // episode-based warmup (not step-based)
     private const int    ProgressInterval = 10;
-    private const int    ParallelThreads  = 4;    // parallel episode collectors
+    private static readonly int ParallelThreads = Math.Max(4, Environment.ProcessorCount);    // parallel episode collectors
     private const double Lambda           = 0.7;  // eligibility trace decay (Q-λ)
     private const double TraceThreshold   = 1e-4; // prune traces below this value
     private const double ActionCount      = 4;    // HybridDecision.Count
@@ -202,9 +202,9 @@ public class SimulationRunner
             if (bestThisIter != null)
                 bestSnapshot = BuildSnapshot(bestThisIter, epBase);
 
-            // Report every iteration — fires every 4 episodes (= ParallelThreads).
+            // Report every iteration — fires every ParallelThreads episodes.
             // The Episode field carries the real cumulative count so the chart
-            // X-axis is always accurate. No ProgressInterval filtering needed.
+            // X-axis is always accurate.
             {
                 var snap = bestSnapshot ?? (collected.Length > 0
                     ? BuildSnapshot(collected[0], epBase) : null);

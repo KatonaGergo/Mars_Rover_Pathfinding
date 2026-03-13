@@ -200,7 +200,7 @@ public class HybridAgent
         (int tx, int ty)? target = decision switch
         {
             HybridDecision.SeekMineral        => PickBestMineral(state, liveMap),
-            HybridDecision.SeekNearestMineral => PickBestMineral(state, liveMap),
+            HybridDecision.SeekNearestMineral => PickNearestMineral(state, liveMap),
             HybridDecision.ReturnToBase       => (liveMap.StartX, liveMap.StartY),
             _                                 => null
         };
@@ -296,18 +296,30 @@ public class HybridAgent
         var ranked = liveMap.MineralsByPathCost(state.X, state.Y);
         if (ranked.Count == 0) return null;
 
+        // Local A* cache — valid for this single call only (map state doesn't
+        // change between candidates). Eliminates duplicate path computations
+        // for the same (from, to) pair within one target-selection decision.
+        var pathCache = new Dictionary<(int, int, int, int), double>();
+        double CachedPathCost(int fx, int fy, int tx, int ty)
+        {
+            var key = (fx, fy, tx, ty);
+            if (!pathCache.TryGetValue(key, out double cost))
+                pathCache[key] = cost = AStarPathfinder.PathCost(liveMap, fx, fy, tx, ty);
+            return cost;
+        }
+
         int    ticksRemaining = _totalTicks - state.Tick;
         (int x, int y)? best = null;
         double bestScore      = double.MinValue;
 
         foreach (var (pos, chebyDist) in ranked)
         {
-            double stepsToMineral = AStarPathfinder.PathCost(
-                liveMap, state.X, state.Y, pos.x, pos.y);
+            double stepsToMineral = CachedPathCost(
+                state.X, state.Y, pos.x, pos.y);
             if (stepsToMineral >= double.MaxValue) continue;
 
-            double stepsHome = AStarPathfinder.PathCost(
-                liveMap, pos.x, pos.y, liveMap.StartX, liveMap.StartY);
+            double stepsHome = CachedPathCost(
+                pos.x, pos.y, liveMap.StartX, liveMap.StartY);
             if (stepsHome >= double.MaxValue) continue;
 
             // Forward leg speed: mirrors ChooseSpeed's night rule exactly.
@@ -355,6 +367,82 @@ public class HybridAgent
 
             double score = 100.0 / (chebyDist + 1) - stepsHome * 0.05;
             if (score > bestScore) { bestScore = score; best = (pos.x, pos.y); }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// SeekNearestMineral target: same feasibility guards as PickBestMineral
+    /// but scores purely on A* steps to the mineral — no return-cost penalty.
+    ///
+    /// This gives the Q-table a genuine choice:
+    ///   SeekMineral        — balances proximity with return cost (forward planning)
+    ///   SeekNearestMineral — pure greedy grab (urgency/late-mission squeeze)
+    ///
+    /// The Q-table learns when each is appropriate: early-day/high-battery favours
+    /// SeekMineral (plan ahead); low-battery/late-day favours SeekNearest (grab
+    /// whatever is reachable before the return window closes).
+    /// </summary>
+    private (int x, int y)? PickNearestMineral(RoverState state, GameMap liveMap)
+    {
+        var ranked = liveMap.MineralsByPathCost(state.X, state.Y);
+        if (ranked.Count == 0) return null;
+
+        // Same local A* cache as PickBestMineral — safe within one call
+        var pathCache = new Dictionary<(int, int, int, int), double>();
+        double CachedPathCost(int fx, int fy, int tx, int ty)
+        {
+            var key = (fx, fy, tx, ty);
+            if (!pathCache.TryGetValue(key, out double cost))
+                pathCache[key] = cost = AStarPathfinder.PathCost(liveMap, fx, fy, tx, ty);
+            return cost;
+        }
+
+        int    ticksRemaining = _totalTicks - state.Tick;
+        (int x, int y)? best = null;
+        double bestScore      = double.MaxValue; // lower = closer
+
+        foreach (var (pos, chebyDist) in ranked)
+        {
+            double stepsToMineral = CachedPathCost(
+                state.X, state.Y, pos.x, pos.y);
+            if (stepsToMineral >= double.MaxValue) continue;
+
+            double stepsHome = CachedPathCost(
+                pos.x, pos.y, liveMap.StartX, liveMap.StartY);
+            if (stepsHome >= double.MaxValue) continue;
+
+            // Same speed/battery/time feasibility guards as PickBestMineral
+            RoverSpeed speedToMineral;
+            if (SimulationEngine.IsDay(state.Tick))
+                speedToMineral = BestAffordableSpeedForLeg(state.Tick,
+                                     (int)stepsToMineral, state.Battery);
+            else
+                speedToMineral = (int)stepsToMineral == 2 ? RoverSpeed.Normal : RoverSpeed.Slow;
+
+            int    ticksToMineral = EnergyCalculator.TripTicks((int)stepsToMineral, speedToMineral);
+            int    tickAtMineral  = state.Tick + ticksToMineral;
+            double battToMineral  = -EnergyCalculator.ExactTripDelta(
+                                        state.Tick, (int)stepsToMineral, speedToMineral, _totalTicks);
+            bool   miningDay      = SimulationEngine.IsDay(tickAtMineral);
+            double battMining     = EnergyCalculator.MiningDrain
+                                    - (miningDay ? EnergyCalculator.DayChargePerTick : 0);
+            double battAtMineral  = state.Battery - battToMineral - battMining;
+
+            if (battAtMineral < BatterySafetyMargin) continue;
+
+            var    speedHome  = BestAffordableSpeedForLeg(tickAtMineral + 1, (int)stepsHome, battAtMineral);
+            int    ticksHome  = EnergyCalculator.TripTicks((int)stepsHome, speedHome);
+
+            if (ticksToMineral + 1 + ticksHome + ReturnSafetyBuffer > ticksRemaining) continue;
+
+            double battHome = -EnergyCalculator.ExactTripDelta(
+                                   tickAtMineral + 1, (int)stepsHome, speedHome, _totalTicks);
+            if (battAtMineral - battHome < BatterySafetyMargin) continue;
+
+            // Score = raw A* distance only — no return penalty
+            if (stepsToMineral < bestScore) { bestScore = stepsToMineral; best = (pos.x, pos.y); }
         }
 
         return best;
