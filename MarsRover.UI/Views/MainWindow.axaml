@@ -319,7 +319,7 @@
                             <StackPanel Grid.Row="0" Margin="0,0,0,6">
                                 <TextBlock Text="TRAINING CURVE" FontSize="15" FontWeight="Bold"
                                            Foreground="#D4521A" LetterSpacing="2"/>
-                                <TextBlock Text="Updates every 4 episodes"
+                                <TextBlock Text="Updates on every run"
                                            FontSize="10" Foreground="#687080" Margin="0,2,0,0"/>
                             </StackPanel>
                             <lvc:CartesianChart Grid.Row="1"
