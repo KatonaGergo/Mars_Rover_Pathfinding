@@ -51,7 +51,7 @@ public partial class MainViewModel : ObservableObject
 
     // ── Map + model path ─────────────────────────────────────────────────────
     [ObservableProperty] private GameMap? _gameMap;
-    private string _modelPath = "dqn_model"; // base path — runner appends .weights.json / .meta.json
+    private string _modelPath = "q_table"; // base path — runner appends .weights.json / .meta.json
     private string _mapPath   = "";           // stored on map load — used for run log
     [ObservableProperty] private bool _hasSavedModel = false;
 

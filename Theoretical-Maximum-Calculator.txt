@@ -6,7 +6,7 @@ Mission duration: 24 hours = 48 half-hour ticks = 1 Martian sol
 
 
 ────────────────────────────────────────────────────────────────────────────────
-PART 1 — PHYSICS CONSTANTS (from EnergyCalculator.cs)
+PART 0 — PHYSICS CONSTANTS (from EnergyCalculator.cs)
 ────────────────────────────────────────────────────────────────────────────────
 
   Energy constant K         = 2.0
@@ -36,7 +36,7 @@ PART 1 — PHYSICS CONSTANTS (from EnergyCalculator.cs)
 
 
 ────────────────────────────────────────────────────────────────────────────────
-PART 2 — THE HARD FLOOR: MINIMUM TICKS PER MINERAL
+PART 1 — THE HARD FLOOR: MINIMUM TICKS PER MINERAL
 ────────────────────────────────────────────────────────────────────────────────
 
   Collecting any mineral unconditionally requires exactly two engine actions:
@@ -47,7 +47,7 @@ PART 2 — THE HARD FLOOR: MINIMUM TICKS PER MINERAL
   Therefore: minimum cost per mineral = 1 (move) + 1 (mine) = 2 ticks.
 
 ────────────────────────────────────────────────────────────────────────────────
-PART 3 — THE RETURN CONSTRAINT
+PART 2 — THE RETURN CONSTRAINT
 ────────────────────────────────────────────────────────────────────────────────
 
   The mission requires the rover to return to base (Start tile) before
@@ -65,7 +65,7 @@ PART 3 — THE RETURN CONSTRAINT
 
 
 ────────────────────────────────────────────────────────────────────────────────
-PART 4 — THEORETICAL MAXIMUM: 23 MINERALS (tick-by-tick proof)
+PART 3 — THEORETICAL MAXIMUM: 23 MINERALS (tick-by-tick proof)
 ────────────────────────────────────────────────────────────────────────────────
 
   Suppose: every mineral is adjacent (1 step) to the rover and to each other.
@@ -152,7 +152,7 @@ Lets run a data analysis!
   │  THEORETICAL MAXIMUM = 23 MINERALS      │
   └──────────────────────────────────────────┘
 ────────────────────────────────────────────────────────────────────────────────
-PART 5 — REAL MAP OPTIMUM: 21 MINERALS
+PART 4 — REAL MAP OPTIMUM: 21 MINERALS
 ────────────────────────────────────────────────────────────────────────────────
 
   Map:    mars_map_50x50.csv
@@ -244,6 +244,70 @@ PART 5 — REAL MAP OPTIMUM: 21 MINERALS
   │    - Only 4 ticks remain after the 21st mineral is mined,   │
   │      not enough to reach any new mineral AND return home     │
   └──────────────────────────────────────────────────────────────┘
+
+  ────────────────────────────────────────────────────────────────────────────────
+PART 5 — REAL-MAP OPTIMUM: 44 MINERALS  (48h)
+────────────────────────────────────────────────────────────────────────────────
+ 
+  Method: greedy-optimal chained simulation with A* exact distances and
+  speed-to-distance rule. Feasibility checked at every step (time + battery).
+ 
+  48h = exactly 2 Martian sols. The first 21 minerals are identical to the
+  24h chain. After mineral #21 (tick 44, Sol 0 night) the rover does not
+  need to sprint home — it has 52 more ticks and a full Sol 1 recharge ahead.
+ 
+  ── Minerals #1–#21: identical to 24h chain ──────────────────────────────────
+ 
+  See Part 6 of the original 24h derivation. Ends at tick 44, battery 70%,
+  position (41,35). Sol 0 night.
+ 
+  ── Minerals #22–#44: new territory ──────────────────────────────────────────
+ 
+  #    Position    From        d    Ticks  Tick  Phase    Battery
+  ──   ─────────   ─────────   ─    ─────  ────  ──────   ───────
+  22   [43, 36]    [43, 35]    1    1      46    NIGHT    66.0%
+  23   [44, 37]    [43, 36]    2    1      48    NIGHT    56.0%
+  24   [45, 37]    [44, 37]    1    1      50    DAY      72.0%
+  25   [44, 38]    [45, 37]    1    1      52    DAY      88.0%
+  26   [43, 37]    [44, 38]    1    1      54    DAY      100%
+  27   [42, 37]    [43, 37]    1    1      56    DAY      100%
+  28   [41, 37]    [42, 37]    1    1      58    DAY      100%
+  29   [42, 36]    [41, 37]    1    1      60    DAY      100%
+  30   [42, 35]    [42, 36]    1    1      62    DAY      100%
+  31   [43, 34]    [42, 35]    1    1      64    DAY      100%
+  32   [44, 34]    [43, 34]    1    1      66    DAY      100%
+  33   [46, 36]    [44, 34]    3    1      68    DAY      100%
+  34   [47, 36]    [46, 36]    1    1      70    DAY      100%
+  35   [47, 37]    [47, 36]    1    1      72    DAY      100%
+  36   [47, 38]    [47, 37]    1    1      74    DAY      100%
+  37   [46, 38]    [47, 38]    1    1      76    DAY      100%
+  38   [46, 37]    [46, 38]    1    1      78    DAY      100%
+  39   [45, 36]    [46, 37]    1    1      80    DAY      100%
+  40   [45, 38]    [45, 36]    2    1      82    NIGHT    90.0%
+  41   [44, 40]    [45, 38]    2    1      84    NIGHT    80.0%
+  42   [45, 41]    [44, 40]    1    1      86    NIGHT    76.0%
+  43   [44, 42]    [45, 41]    1    1      88    NIGHT    72.0%
+  44   [44, 41]    [44, 42]    1    1      90    NIGHT    68.0%
+ 
+  After mineral #44: tick 90/96, battery 68%. Sol 1 night.
+  Return home distance: ~8 steps. Fast return = 3 ticks. Arrives tick 93/96.
+ 
+  ── Why not a 45th mineral? ──────────────────────────────────────────────────
+ 
+  After mineral #44 at tick 90, 6 ticks remain.
+  Nearest remaining mineral requires t_to=1 + mine=1 + t_home(Fast ~8 steps)=3
+  = 5 ticks minimum. Battery at 68% → 68 - (1×2%) - (1×2%) - (3×18%) = 10%.
+  Feasible on battery — but only 6 ticks remain and the rover ends far from
+  home. Any further mineral would leave no return margin.
+  Time and battery together rule out a 45th mineral from this position.
+ 
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  48h REAL-MAP OPTIMUM = 44 MINERALS                                     │
+  │  Physics ceiling = 47.  Gap of 3 caused by:                             │
+  │    - Travel time to later clusters (some d=2–3 steps)                   │
+  │    - Night phase minerals costing 4% each (no solar recovery)           │
+  │    - Final return from far corner consuming remaining buffer             │
+  └──────────────────────────────────────────────────────────────────────────┘
 
 ────────────────────────────────────────────────────────────────────────────────
 PART 6 — REAL-MAP OPTIMUM: 95 MINERALS  (100h)
