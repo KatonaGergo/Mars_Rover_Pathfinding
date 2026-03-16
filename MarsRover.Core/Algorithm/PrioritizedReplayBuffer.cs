@@ -71,11 +71,14 @@ public class PrioritizedReplayBuffer
 
     /// <summary>
     /// Samples <paramref name="batchSize"/> transitions proportional to priority.
-    /// Returns the sampled items along with their buffer indices for priority updates.
+    /// Sampling is without replacement for better batch diversity.
+    /// Returns sampled items, their buffer indices, and IS-weights.
     /// </summary>
-    public (PrioritizedTransition[] batch, int[] indices) Sample(int batchSize)
+    public (PrioritizedTransition[] batch, int[] indices, double[] isWeights)
+        Sample(int batchSize, double beta = 0.4)
     {
         int n = Math.Min(batchSize, _count);
+        if (n <= 0) return (Array.Empty<PrioritizedTransition>(), Array.Empty<int>(), Array.Empty<double>());
 
         // Build priority^α weights for live entries
         var weights = new double[_count];
@@ -87,26 +90,78 @@ public class PrioritizedReplayBuffer
             totalWeight += w;
         }
 
-        var batch   = new PrioritizedTransition[n];
-        var indices = new int[n];
+        if (totalWeight <= 0)
+        {
+            var fallbackBatch   = new PrioritizedTransition[n];
+            var fallbackIndices = new int[n];
+            var fallbackWeights = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                int idx = _random.Next(_count);
+                fallbackBatch[i] = _buffer[idx];
+                fallbackIndices[i] = idx;
+                fallbackWeights[i] = 1.0;
+            }
+            return (fallbackBatch, fallbackIndices, fallbackWeights);
+        }
+
+        var batch      = new PrioritizedTransition[n];
+        var indices    = new int[n];
+        var isWeights  = new double[n];
+        double remain  = totalWeight;
+        double maxIsW  = double.MinValue;
 
         for (int i = 0; i < n; i++)
         {
-            double sample    = _random.NextDouble() * totalWeight;
+            double sample    = _random.NextDouble() * remain;
             double cumulated = 0;
-            int    chosen    = 0;
+            int    chosen    = -1;
 
             for (int j = 0; j < _count; j++)
             {
+                if (weights[j] <= 0) continue;
                 cumulated += weights[j];
                 if (cumulated >= sample) { chosen = j; break; }
             }
 
+            if (chosen < 0)
+            {
+                for (int j = 0; j < _count; j++)
+                {
+                    if (weights[j] > 0) { chosen = j; break; }
+                }
+                if (chosen < 0) chosen = _random.Next(_count);
+            }
+
             batch[i]   = _buffer[chosen];
             indices[i] = chosen;
+
+            double prob = weights[chosen] / totalWeight;
+            double isw  = Math.Pow(Math.Max(_count * prob, 1e-12), -Math.Clamp(beta, 0.0, 1.0));
+            isWeights[i] = isw;
+            if (isw > maxIsW) maxIsW = isw;
+
+            remain -= weights[chosen];
+            weights[chosen] = 0; // no replacement
+
+            if (remain <= 0 && i + 1 < n)
+            {
+                for (int k = i + 1; k < n; k++)
+                {
+                    int idx = _random.Next(_count);
+                    batch[k] = _buffer[idx];
+                    indices[k] = idx;
+                    isWeights[k] = 1.0;
+                }
+                break;
+            }
         }
 
-        return (batch, indices);
+        if (maxIsW <= 0) maxIsW = 1.0;
+        for (int i = 0; i < isWeights.Length; i++)
+            isWeights[i] /= maxIsW; // normalize to [0,1]
+
+        return (batch, indices, isWeights);
     }
 
     // ── Priority update ───────────────────────────────────────────────────────

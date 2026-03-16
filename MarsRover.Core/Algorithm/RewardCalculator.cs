@@ -14,6 +14,8 @@ public static class HybridRewardCalculator
     public const double CriticalBattery   =  -50.0;
     public const double NightMovePenalty  =   -0.5;
     public const double IdleDuringDay     =   -2.0;
+    public const double TickCost          =   -0.2;
+    public const double ReturnBatteryBonusPerPct = 0.25;
 
     public static double Calculate(
         RoverState         prevState,
@@ -29,12 +31,17 @@ public static class HybridRewardCalculator
         if (isTerminal)
         {
             if (result.Battery <= 0)    reward += BatteryDied;
-            if (returnedHome)           reward += ReturnedToBase;
+            if (returnedHome)
+            {
+                reward += ReturnedToBase;
+                reward += result.Battery * ReturnBatteryBonusPerPct;
+            }
             else if (result.Battery > 0) reward += FailedToReturn;
             reward += result.TotalMinerals * 10.0;
             return reward;
         }
 
+        reward += TickCost;
         if (collectedMineral)           reward += MineralCollected;
         if (result.Battery < 5)         reward += CriticalBattery;
         else if (result.Battery < 10)   reward += LowBatteryWarning;

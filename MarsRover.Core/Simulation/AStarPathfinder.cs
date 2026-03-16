@@ -17,6 +17,7 @@ public static class AStarPathfinder
 {
     private const double StepCost = 1.0;
 
+    private static readonly Direction[] Directions = Enum.GetValues<Direction>();
     private static readonly bool[] IsCardinal = [true, false, true, false, true, false, true, false];
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -32,45 +33,32 @@ public static class AStarPathfinder
 
         var openSet  = new PriorityQueue<Node, double>();
         var cameFrom = new Dictionary<(int, int), (int px, int py, Direction dir)>();
-        var gScore   = new Dictionary<(int, int), double>();
+        var gScore   = new double[GameMap.Width, GameMap.Height];
+        Fill(gScore, double.MaxValue);
 
-        var startKey = (startX, startY);
-        gScore[startKey] = 0;
-        openSet.Enqueue(new Node(startX, startY), Heuristic(startX, startY, goalX, goalY));
+        gScore[startX, startY] = 0;
+        openSet.Enqueue(new Node(startX, startY, 0), Heuristic(startX, startY, goalX, goalY));
 
         while (openSet.Count > 0)
         {
             var current = openSet.Dequeue();
+            if (current.G > gScore[current.X, current.Y]) continue; // stale queue entry
 
             if (current.X == goalX && current.Y == goalY)
                 return ReconstructPath(cameFrom, goalX, goalY);
 
-            foreach (Direction dir in Enum.GetValues<Direction>())
+            foreach (Direction dir in Directions)
             {
-                var (dx, dy) = GameMap.DirectionDelta(dir);
-                int nx = current.X + dx;
-                int ny = current.Y + dy;
+                if (!TryStep(map, current.X, current.Y, dir, out int nx, out int ny))
+                    continue;
 
-                if (!map.IsPassable(nx, ny)) continue;
-
-                if (!IsCardinal[(int)dir])
+                double tentativeG = current.G + StepCost;
+                if (tentativeG < gScore[nx, ny])
                 {
-                    if (!map.IsPassable(current.X + dx, current.Y) ||
-                        !map.IsPassable(current.X, current.Y + dy))
-                        continue;
-                }
-
-                double stepCost   = StepCost; // uniform, all directions cost 1
-                double tentativeG = gScore.GetValueOrDefault((current.X, current.Y), double.MaxValue)
-                                    + stepCost;
-
-                var neighborKey = (nx, ny);
-                if (tentativeG < gScore.GetValueOrDefault(neighborKey, double.MaxValue))
-                {
-                    cameFrom[neighborKey] = (current.X, current.Y, dir);
-                    gScore[neighborKey]   = tentativeG;
+                    cameFrom[(nx, ny)] = (current.X, current.Y, dir);
+                    gScore[nx, ny]     = tentativeG;
                     double f = tentativeG + Heuristic(nx, ny, goalX, goalY);
-                    openSet.Enqueue(new Node(nx, ny), f);
+                    openSet.Enqueue(new Node(nx, ny, tentativeG), f);
                 }
             }
         }
@@ -85,11 +73,79 @@ public static class AStarPathfinder
     /// </summary>
     public static double PathCost(GameMap map, int startX, int startY, int goalX, int goalY)
     {
-        var path = FindPath(map, startX, startY, goalX, goalY);
-        if (path.Count == 0 && !(startX == goalX && startY == goalY))
+        if (startX == goalX && startY == goalY) return 0;
+        if (!map.IsPassable(startX, startY) || !map.IsPassable(goalX, goalY))
             return double.MaxValue;
 
-        return path.Count; // uniform cost — path length = number of movement points
+        var openSet = new PriorityQueue<Node, double>();
+        var gScore  = new double[GameMap.Width, GameMap.Height];
+        Fill(gScore, double.MaxValue);
+
+        gScore[startX, startY] = 0;
+        openSet.Enqueue(new Node(startX, startY, 0), Heuristic(startX, startY, goalX, goalY));
+
+        while (openSet.Count > 0)
+        {
+            var current = openSet.Dequeue();
+            if (current.G > gScore[current.X, current.Y]) continue; // stale queue entry
+
+            if (current.X == goalX && current.Y == goalY)
+                return current.G;
+
+            foreach (Direction dir in Directions)
+            {
+                if (!TryStep(map, current.X, current.Y, dir, out int nx, out int ny))
+                    continue;
+
+                double tentativeG = current.G + StepCost;
+                if (tentativeG < gScore[nx, ny])
+                {
+                    gScore[nx, ny] = tentativeG;
+                    double f = tentativeG + Heuristic(nx, ny, goalX, goalY);
+                    openSet.Enqueue(new Node(nx, ny, tentativeG), f);
+                }
+            }
+        }
+
+        return double.MaxValue;
+    }
+
+    /// <summary>
+    /// Returns exact shortest-path distances (in movement points) from one source
+    /// tile to every passable tile. Unreachable cells are int.MaxValue.
+    /// Uses uniform-cost BFS with the same 8-way corner-cutting rules as A*.
+    /// </summary>
+    public static int[,] BuildDistanceField(GameMap map, int startX, int startY)
+    {
+        var dist = new int[GameMap.Width, GameMap.Height];
+        Fill(dist, int.MaxValue);
+
+        if (!map.IsPassable(startX, startY))
+            return dist;
+
+        var queue = new Queue<(int x, int y)>();
+        dist[startX, startY] = 0;
+        queue.Enqueue((startX, startY));
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            int nextDist = dist[current.x, current.y] + 1;
+
+            foreach (Direction dir in Directions)
+            {
+                if (!TryStep(map, current.x, current.y, dir, out int nx, out int ny))
+                    continue;
+
+                if (nextDist < dist[nx, ny])
+                {
+                    dist[nx, ny] = nextDist;
+                    queue.Enqueue((nx, ny));
+                }
+            }
+        }
+
+        return dist;
     }
 
     // ── Heuristic ─────────────────────────────────────────────────────────────
@@ -122,7 +178,38 @@ public static class AStarPathfinder
 
     // ── Private types ─────────────────────────────────────────────────────────
 
-    private record struct Node(int X, int Y);
+    private static bool TryStep(GameMap map, int x, int y, Direction dir, out int nx, out int ny)
+    {
+        var (dx, dy) = GameMap.DirectionDelta(dir);
+        nx = x + dx;
+        ny = y + dy;
+
+        if (!map.IsPassable(nx, ny)) return false;
+
+        if (!IsCardinal[(int)dir])
+        {
+            if (!map.IsPassable(x + dx, y) || !map.IsPassable(x, y + dy))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static void Fill(double[,] matrix, double value)
+    {
+        for (int x = 0; x < matrix.GetLength(0); x++)
+            for (int y = 0; y < matrix.GetLength(1); y++)
+                matrix[x, y] = value;
+    }
+
+    private static void Fill(int[,] matrix, int value)
+    {
+        for (int x = 0; x < matrix.GetLength(0); x++)
+            for (int y = 0; y < matrix.GetLength(1); y++)
+                matrix[x, y] = value;
+    }
+
+    private record struct Node(int X, int Y, double G);
 }
 
 /// <summary>One step in an A* path.</summary>

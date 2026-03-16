@@ -27,6 +27,9 @@ public class HybridAgent
     private const int    ReturnSafetyBuffer  = 1;
     private const double BatterySafetyMargin = 3.0;
     private const double DetourThreshold     = 6.0;
+    private const int    LookaheadTopK       = 6;
+    private const double LookaheadWeight     = 0.35;
+    private const int    UrgencyBufferTicks  = 2;
 
     // ── Fields ────────────────────────────────────────────────────────────────
     private readonly QTable  _qTable;
@@ -43,6 +46,10 @@ public class HybridAgent
 
     private Queue<PathStep> _currentPath = new();
     private MissionPhase    _phase       = MissionPhase.Collection;
+    private int[,]?         _baseDistanceField;
+    private int[,]?         _cachedDistanceField;
+    private int             _cachedFieldX = int.MinValue;
+    private int             _cachedFieldY = int.MinValue;
 
     public HybridAgent(GameMap map, int totalTicks, QTable? existingTable = null, int seed = 42)
     {
@@ -108,17 +115,13 @@ public class HybridAgent
     private bool MustReturnNow(RoverState state, GameMap liveMap)
     {
         int ticksRemaining = _totalTicks - state.Tick;
+        int returnSteps = DistanceToBaseSteps(state, liveMap);
+        if (returnSteps == int.MaxValue) return true;
 
-        double returnSteps = AStarPathfinder.PathCost(
-            liveMap, state.X, state.Y, liveMap.StartX, liveMap.StartY);
-        if (returnSteps >= double.MaxValue)
-            returnSteps = liveMap.ChebyshevDistance(
-                state.X, state.Y, liveMap.StartX, liveMap.StartY);
+        var plan = SimulateDynamicLeg(state.Tick, returnSteps, state.Battery);
+        if (!plan.IsFeasible) return true;
 
-        var bestSpeed   = BestAffordableSpeedForLeg(state.Tick, (int)returnSteps, state.Battery);
-        int returnTicks = EnergyCalculator.TripTicks((int)returnSteps, bestSpeed);
-
-        return ticksRemaining <= returnTicks + ReturnSafetyBuffer;
+        return ticksRemaining <= plan.Ticks + ReturnSafetyBuffer;
     }
 
     private RoverAction NavigateHome(RoverState state, GameMap liveMap)
@@ -136,50 +139,50 @@ public class HybridAgent
     {
         if (liveMap.RemainingMinerals.Count == 0) return null;
         int ticksRemaining = _totalTicks - state.Tick;
+        var roverField     = GetDistanceField(state.X, state.Y, liveMap);
+        var baseField      = GetBaseDistanceField(liveMap);
+        int directSteps    = FieldDistance(roverField, liveMap.StartX, liveMap.StartY);
+        if (directSteps == int.MaxValue) return null;
+
+        (int x, int y)? best   = null;
+        double bestScore       = double.MinValue;
 
         foreach (var pos in liveMap.RemainingMinerals)
         {
-            double distToMineral = liveMap.ChebyshevDistance(state.X, state.Y, pos.x, pos.y);
-            if (distToMineral > DetourThreshold) continue;
+            int stepsToMineral = FieldDistance(roverField, pos.x, pos.y);
+            if (stepsToMineral == int.MaxValue) continue;
 
-            double stepsToMineral = AStarPathfinder.PathCost(
-                liveMap, state.X, state.Y, pos.x, pos.y);
-            if (stepsToMineral >= double.MaxValue) continue;
+            int stepsHome = FieldDistance(baseField, pos.x, pos.y);
+            if (stepsHome == int.MaxValue) continue;
 
-            double returnSteps = AStarPathfinder.PathCost(
-                liveMap, pos.x, pos.y, liveMap.StartX, liveMap.StartY);
-            if (returnSteps >= double.MaxValue) continue;
+            int detourCost = Math.Max(0, stepsToMineral + stepsHome - directSteps);
+            if (detourCost > DetourThreshold) continue;
 
-            // Use best affordable speed for each leg — same logic as PickBestMineral.
-            // Previously hardcoded Slow for both legs, which was far too pessimistic:
-            // the rover was rejecting reachable detours because Slow's battery math
-            // said they were unaffordable when Normal or Fast actually had plenty of margin.
-            var speedToMineral = BestAffordableSpeedForLeg(
-                state.Tick, (int)stepsToMineral, state.Battery);
-            int ticksToMineral = EnergyCalculator.TripTicks((int)stepsToMineral, speedToMineral);
-            int tickAtMineral  = state.Tick + ticksToMineral;
+            var legToMineral = SimulateLegWithPolicy(
+                state.Tick, stepsToMineral, state.Battery);
+            if (!legToMineral.IsFeasible) continue;
 
-            double battToMineral = -EnergyCalculator.ExactTripDelta(
-                state.Tick, (int)stepsToMineral, speedToMineral, _totalTicks);
-            bool   miningDay   = SimulationEngine.IsDay(tickAtMineral);
-            double battMining  = EnergyCalculator.MiningDrain
-                                 - (miningDay ? EnergyCalculator.DayChargePerTick : 0);
-            double battAfterMine = state.Battery - battToMineral - battMining;
-
+            int tickAtMineral     = state.Tick + legToMineral.Ticks;
+            double battAfterMine  = ApplyMiningTick(legToMineral.FinalBattery, tickAtMineral);
             if (battAfterMine < BatterySafetyMargin) continue;
 
-            var speedHome  = BestAffordableSpeedForLeg(
-                tickAtMineral + 1, (int)returnSteps, battAfterMine);
-            int ticksHome  = EnergyCalculator.TripTicks((int)returnSteps, speedHome);
+            var legHome = SimulateDynamicLeg(tickAtMineral + 1, stepsHome, battAfterMine);
+            if (!legHome.IsFeasible) continue;
 
-            if (ticksToMineral + 1 + ticksHome + ReturnSafetyBuffer > ticksRemaining) continue;
+            if (legToMineral.Ticks + 1 + legHome.Ticks + ReturnSafetyBuffer > ticksRemaining)
+                continue;
+            if (legHome.MinBattery < BatterySafetyMargin) continue;
 
-            double battHome = -EnergyCalculator.ExactTripDelta(
-                tickAtMineral + 1, (int)returnSteps, speedHome, _totalTicks);
-            if (battAfterMine - battHome >= BatterySafetyMargin)
-                return pos;
+            // Prefer low-detour minerals that still keep strong return margin.
+            double score = 100.0 / (detourCost + 1.0) - stepsHome * 0.03 + battAfterMine * 0.01;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = (pos.x, pos.y);
+            }
         }
-        return null;
+
+        return best;
     }
 
     // ── Strategic decision ────────────────────────────────────────────────────
@@ -317,80 +320,32 @@ public class HybridAgent
 
     private (int x, int y)? PickBestMineral(RoverState state, GameMap liveMap)
     {
-        var ranked = liveMap.MineralsByPathCost(state.X, state.Y);
-        if (ranked.Count == 0) return null;
+        if (liveMap.RemainingMinerals.Count == 0) return null;
 
-        // Local A* cache — valid for this single call only (map state doesn't
-        // change between candidates). Eliminates duplicate path computations
-        // for the same (from, to) pair within one target-selection decision.
-        var pathCache = new Dictionary<(int, int, int, int), double>();
-        double CachedPathCost(int fx, int fy, int tx, int ty)
-        {
-            var key = (fx, fy, tx, ty);
-            if (!pathCache.TryGetValue(key, out double cost))
-                pathCache[key] = cost = AStarPathfinder.PathCost(liveMap, fx, fy, tx, ty);
-            return cost;
-        }
+        var roverField = GetDistanceField(state.X, state.Y, liveMap);
+        var baseField  = GetBaseDistanceField(liveMap);
+        var feasible   = EvaluateFeasibleMinerals(state, liveMap, roverField, baseField);
+        if (feasible.Count == 0) return null;
 
-        int    ticksRemaining = _totalTicks - state.Tick;
+        feasible.Sort((a, b) => b.BaseScore.CompareTo(a.BaseScore));
+        int lookaheadCount = Math.Min(LookaheadTopK, feasible.Count);
+
         (int x, int y)? best = null;
-        double bestScore      = double.MinValue;
+        double bestScore = double.MinValue;
 
-        foreach (var (pos, chebyDist) in ranked)
+        for (int i = 0; i < feasible.Count; i++)
         {
-            double stepsToMineral = CachedPathCost(
-                state.X, state.Y, pos.x, pos.y);
-            if (stepsToMineral >= double.MaxValue) continue;
+            var plan  = feasible[i];
+            double score = plan.BaseScore;
 
-            double stepsHome = CachedPathCost(
-                pos.x, pos.y, liveMap.StartX, liveMap.StartY);
-            if (stepsHome >= double.MaxValue) continue;
+            if (i < lookaheadCount)
+                score += LookaheadWeight * BestSecondLegScore(plan, liveMap, baseField, state.Tick);
 
-            // Forward leg speed: mirrors ChooseSpeed's night rule exactly.
-            // Night: 2-step → Normal (saves 1 tick, 4% extra, dawn-recoverable).
-            //        other  → Slow (no Fast at night).
-            // Day:   fastest affordable speed within distance cap.
-            RoverSpeed speedToMineral;
-            if (SimulationEngine.IsDay(state.Tick))
+            if (score > bestScore)
             {
-                speedToMineral = BestAffordableSpeedForLeg(state.Tick,
-                                     (int)stepsToMineral, state.Battery);
+                bestScore = score;
+                best = (plan.X, plan.Y);
             }
-            else
-            {
-                speedToMineral = (int)stepsToMineral == 2
-                    ? RoverSpeed.Normal
-                    : RoverSpeed.Slow;
-            }
-
-            int ticksToMineral  = EnergyCalculator.TripTicks((int)stepsToMineral, speedToMineral);
-            int tickAtMineral   = state.Tick + ticksToMineral;
-
-            // EXACT battery after arriving and mining
-            double battToMineral = -EnergyCalculator.ExactTripDelta(
-                                        state.Tick, (int)stepsToMineral, speedToMineral, _totalTicks);
-            bool   miningDay    = SimulationEngine.IsDay(tickAtMineral);
-            double battMining   = EnergyCalculator.MiningDrain
-                                  - (miningDay ? EnergyCalculator.DayChargePerTick : 0);
-            double battAtMineral = state.Battery - battToMineral - battMining;
-
-            if (battAtMineral < BatterySafetyMargin) continue;
-
-            // Home leg: use best affordable speed (return is always urgent-optimal)
-            var speedHome = BestAffordableSpeedForLeg(
-                                tickAtMineral + 1, (int)stepsHome, battAtMineral);
-            int ticksHome = EnergyCalculator.TripTicks((int)stepsHome, speedHome);
-
-            // Time guard
-            if (ticksToMineral + 1 + ticksHome + ReturnSafetyBuffer > ticksRemaining) continue;
-
-            // Battery guard for full trip
-            double battHome = -EnergyCalculator.ExactTripDelta(
-                                   tickAtMineral + 1, (int)stepsHome, speedHome, _totalTicks);
-            if (battAtMineral - battHome < BatterySafetyMargin) continue;
-
-            double score = 100.0 / (chebyDist + 1) - stepsHome * 0.05;
-            if (score > bestScore) { bestScore = score; best = (pos.x, pos.y); }
         }
 
         return best;
@@ -410,63 +365,99 @@ public class HybridAgent
     /// </summary>
     private (int x, int y)? PickNearestMineral(RoverState state, GameMap liveMap)
     {
-        var ranked = liveMap.MineralsByPathCost(state.X, state.Y);
-        if (ranked.Count == 0) return null;
+        if (liveMap.RemainingMinerals.Count == 0) return null;
 
-        // Same local A* cache as PickBestMineral — safe within one call
-        var pathCache = new Dictionary<(int, int, int, int), double>();
-        double CachedPathCost(int fx, int fy, int tx, int ty)
+        var roverField = GetDistanceField(state.X, state.Y, liveMap);
+        var baseField  = GetBaseDistanceField(liveMap);
+        var feasible   = EvaluateFeasibleMinerals(state, liveMap, roverField, baseField);
+        if (feasible.Count == 0) return null;
+
+        var nearest = feasible
+            .OrderBy(p => p.StepsToMineral)
+            .ThenBy(p => p.StepsHome)
+            .First();
+
+        return (nearest.X, nearest.Y);
+    }
+
+    private List<MineralCandidatePlan> EvaluateFeasibleMinerals(
+        RoverState state, GameMap liveMap, int[,] roverField, int[,] baseField)
+    {
+        int ticksRemaining = _totalTicks - state.Tick;
+        var candidates = new List<MineralCandidatePlan>();
+
+        foreach (var pos in liveMap.RemainingMinerals)
         {
-            var key = (fx, fy, tx, ty);
-            if (!pathCache.TryGetValue(key, out double cost))
-                pathCache[key] = cost = AStarPathfinder.PathCost(liveMap, fx, fy, tx, ty);
-            return cost;
+            int stepsToMineral = FieldDistance(roverField, pos.x, pos.y);
+            if (stepsToMineral == int.MaxValue) continue;
+
+            int stepsHome = FieldDistance(baseField, pos.x, pos.y);
+            if (stepsHome == int.MaxValue) continue;
+
+            var legToMineral = SimulateLegWithPolicy(
+                state.Tick, stepsToMineral, state.Battery);
+            if (!legToMineral.IsFeasible) continue;
+
+            int tickAtMineral = state.Tick + legToMineral.Ticks;
+            double battAfterMine = ApplyMiningTick(legToMineral.FinalBattery, tickAtMineral);
+            if (battAfterMine < BatterySafetyMargin) continue;
+
+            var legHome = SimulateDynamicLeg(tickAtMineral + 1, stepsHome, battAfterMine);
+            if (!legHome.IsFeasible) continue;
+            if (legHome.MinBattery < BatterySafetyMargin) continue;
+
+            if (legToMineral.Ticks + 1 + legHome.Ticks + ReturnSafetyBuffer > ticksRemaining)
+                continue;
+
+            double baseScore = 100.0 / (stepsToMineral + 1.0) - stepsHome * 0.05;
+            candidates.Add(new MineralCandidatePlan(
+                X:               pos.x,
+                Y:               pos.y,
+                StepsToMineral:  stepsToMineral,
+                StepsHome:       stepsHome,
+                TicksToMineral:  legToMineral.Ticks,
+                TickAfterMine:   tickAtMineral + 1,
+                BatteryAfterMine:battAfterMine,
+                BaseScore:       baseScore));
         }
 
-        int    ticksRemaining = _totalTicks - state.Tick;
-        (int x, int y)? best = null;
-        double bestScore      = double.MaxValue; // lower = closer
+        return candidates;
+    }
 
-        foreach (var (pos, chebyDist) in ranked)
+    private double BestSecondLegScore(
+        MineralCandidatePlan first, GameMap liveMap, int[,] baseField, int missionTickAtStart)
+    {
+        var fromFirstField = AStarPathfinder.BuildDistanceField(liveMap, first.X, first.Y);
+        int ticksRemaining = _totalTicks - missionTickAtStart;
+        double best = 0.0;
+
+        foreach (var pos in liveMap.RemainingMinerals)
         {
-            double stepsToMineral = CachedPathCost(
-                state.X, state.Y, pos.x, pos.y);
-            if (stepsToMineral >= double.MaxValue) continue;
+            if (pos.x == first.X && pos.y == first.Y) continue;
 
-            double stepsHome = CachedPathCost(
-                pos.x, pos.y, liveMap.StartX, liveMap.StartY);
-            if (stepsHome >= double.MaxValue) continue;
+            int stepsAB = FieldDistance(fromFirstField, pos.x, pos.y);
+            if (stepsAB == int.MaxValue) continue;
 
-            // Same speed/battery/time feasibility guards as PickBestMineral
-            RoverSpeed speedToMineral;
-            if (SimulationEngine.IsDay(state.Tick))
-                speedToMineral = BestAffordableSpeedForLeg(state.Tick,
-                                     (int)stepsToMineral, state.Battery);
-            else
-                speedToMineral = (int)stepsToMineral == 2 ? RoverSpeed.Normal : RoverSpeed.Slow;
+            int stepsHome = FieldDistance(baseField, pos.x, pos.y);
+            if (stepsHome == int.MaxValue) continue;
 
-            int    ticksToMineral = EnergyCalculator.TripTicks((int)stepsToMineral, speedToMineral);
-            int    tickAtMineral  = state.Tick + ticksToMineral;
-            double battToMineral  = -EnergyCalculator.ExactTripDelta(
-                                        state.Tick, (int)stepsToMineral, speedToMineral, _totalTicks);
-            bool   miningDay      = SimulationEngine.IsDay(tickAtMineral);
-            double battMining     = EnergyCalculator.MiningDrain
-                                    - (miningDay ? EnergyCalculator.DayChargePerTick : 0);
-            double battAtMineral  = state.Battery - battToMineral - battMining;
+            var legAB = SimulateLegWithPolicy(
+                first.TickAfterMine, stepsAB, first.BatteryAfterMine);
+            if (!legAB.IsFeasible) continue;
 
-            if (battAtMineral < BatterySafetyMargin) continue;
+            int tickAtSecond = first.TickAfterMine + legAB.Ticks;
+            double battAfterSecondMine = ApplyMiningTick(legAB.FinalBattery, tickAtSecond);
+            if (battAfterSecondMine < BatterySafetyMargin) continue;
 
-            var    speedHome  = BestAffordableSpeedForLeg(tickAtMineral + 1, (int)stepsHome, battAtMineral);
-            int    ticksHome  = EnergyCalculator.TripTicks((int)stepsHome, speedHome);
+            var legHome = SimulateDynamicLeg(tickAtSecond + 1, stepsHome, battAfterSecondMine);
+            if (!legHome.IsFeasible) continue;
+            if (legHome.MinBattery < BatterySafetyMargin) continue;
 
-            if (ticksToMineral + 1 + ticksHome + ReturnSafetyBuffer > ticksRemaining) continue;
+            int totalTicks = first.TicksToMineral + 1 + legAB.Ticks + 1 + legHome.Ticks + ReturnSafetyBuffer;
+            if (totalTicks > ticksRemaining) continue;
 
-            double battHome = -EnergyCalculator.ExactTripDelta(
-                                   tickAtMineral + 1, (int)stepsHome, speedHome, _totalTicks);
-            if (battAtMineral - battHome < BatterySafetyMargin) continue;
-
-            // Score = raw A* distance only — no return penalty
-            if (stepsToMineral < bestScore) { bestScore = stepsToMineral; best = (pos.x, pos.y); }
+            double score = 100.0 / (stepsAB + 1.0) - stepsHome * 0.05;
+            if (score > best) best = score;
         }
 
         return best;
@@ -508,12 +499,9 @@ public class HybridAgent
     {
         if (_phase == MissionPhase.Returning)
         {
-            double stepsHome = AStarPathfinder.PathCost(
-                liveMap, state.X, state.Y, liveMap.StartX, liveMap.StartY);
-            if (stepsHome >= double.MaxValue)
-                stepsHome = liveMap.ChebyshevDistance(
-                    state.X, state.Y, liveMap.StartX, liveMap.StartY);
-            return BestAffordableSpeedForLeg(state.Tick, (int)stepsHome, state.Battery);
+            int stepsHome = DistanceToBaseSteps(state, liveMap);
+            if (stepsHome == int.MaxValue) return RoverSpeed.Slow;
+            return BestAffordableSpeedForLeg(state.Tick, stepsHome, state.Battery);
         }
 
         // NIGHT SPEED CAP: cap by path length, not by affordability.
@@ -553,18 +541,119 @@ public class HybridAgent
     /// </summary>
     private RoverSpeed BestAffordableSpeedForLeg(int startTick, int pathSteps, double battAtStart)
     {
+        if (pathSteps <= 0) return RoverSpeed.Slow;
+        var maxSpeed = MaxSpeedByDistance(pathSteps);
+
         foreach (var speed in new[] { RoverSpeed.Fast, RoverSpeed.Normal, RoverSpeed.Slow })
         {
-            double tripDelta  = EnergyCalculator.ExactTripDelta(
-                                    startTick, pathSteps, speed, _totalTicks);
-            if (battAtStart + tripDelta >= BatterySafetyMargin)
+            if (speed > maxSpeed) continue;
+            var sim = EnergyCalculator.SimulateTrip(
+                startTick, pathSteps, speed, _totalTicks, battAtStart);
+            if (sim.MinBattery >= BatterySafetyMargin
+                && sim.FinalBattery >= BatterySafetyMargin)
                 return speed;
         }
         return RoverSpeed.Slow;
     }
 
     private double ExactBatteryCost(int startTick, int pathSteps, RoverSpeed speed)
-        => Math.Max(0, -EnergyCalculator.ExactTripDelta(startTick, pathSteps, speed, _totalTicks));
+        => Math.Max(0, -EnergyCalculator.SimulateTrip(
+            startTick, pathSteps, speed, _totalTicks, EnergyCalculator.MaxBattery).NetDelta);
+
+    private LegPlan SimulateLegWithPolicy(int startTick, int pathSteps, double batteryAtStart)
+    {
+        if (pathSteps <= 0)
+            return new LegPlan(true, 0, RoverSpeed.Slow, batteryAtStart, batteryAtStart);
+
+        RoverSpeed chosenSpeed = SimulationEngine.IsDay(startTick)
+            ? BestAffordableSpeedForLeg(startTick, pathSteps, batteryAtStart)
+            : NightSpeedPolicy(pathSteps);
+
+        var sim = EnergyCalculator.SimulateTrip(
+            startTick, pathSteps, chosenSpeed, _totalTicks, batteryAtStart);
+
+        bool feasible = sim.MinBattery >= BatterySafetyMargin
+                        && sim.FinalBattery >= BatterySafetyMargin;
+
+        return new LegPlan(feasible, sim.Ticks, chosenSpeed, sim.FinalBattery, sim.MinBattery);
+    }
+
+    private DynamicLegPlan SimulateDynamicLeg(int startTick, int pathSteps, double batteryAtStart)
+    {
+        if (pathSteps <= 0)
+            return new DynamicLegPlan(true, 0, batteryAtStart, batteryAtStart);
+
+        int stepsRemaining = pathSteps;
+        int tick = startTick;
+        int ticksUsed = 0;
+        double battery = Math.Clamp(batteryAtStart, 0, EnergyCalculator.MaxBattery);
+        double minBattery = battery;
+
+        while (stepsRemaining > 0)
+        {
+            var candidateSpeeds = TickSpeedCandidates(tick, stepsRemaining);
+            RoverSpeed? chosen = null;
+            double chosenBattery = battery;
+
+            foreach (var speed in candidateSpeeds)
+            {
+                bool isDay = SimulationEngine.IsDay(tick);
+                double nextBattery = EnergyCalculator.Apply(
+                    battery, RoverActionType.Move, speed, isDay);
+                if (nextBattery < BatterySafetyMargin) continue;
+                chosen = speed;
+                chosenBattery = nextBattery;
+                break;
+            }
+
+            if (chosen == null)
+                return new DynamicLegPlan(false, ticksUsed, battery, minBattery);
+
+            stepsRemaining -= (int)chosen.Value;
+            battery = chosenBattery;
+            minBattery = Math.Min(minBattery, battery);
+            tick++;
+            ticksUsed++;
+        }
+
+        return new DynamicLegPlan(true, ticksUsed, battery, minBattery);
+    }
+
+    private static RoverSpeed NightSpeedPolicy(int stepsRemaining)
+        => stepsRemaining == 2 ? RoverSpeed.Normal : RoverSpeed.Slow;
+
+    private static RoverSpeed MaxSpeedByDistance(int stepsRemaining)
+        => stepsRemaining switch
+        {
+            <= 1 => RoverSpeed.Slow,
+            2    => RoverSpeed.Normal,
+            _    => RoverSpeed.Fast
+        };
+
+    private IEnumerable<RoverSpeed> TickSpeedCandidates(int tick, int stepsRemaining)
+    {
+        if (!SimulationEngine.IsDay(tick))
+        {
+            return NightSpeedPolicy(stepsRemaining) == RoverSpeed.Normal
+                ? new[] { RoverSpeed.Normal, RoverSpeed.Slow }
+                : new[] { RoverSpeed.Slow };
+        }
+
+        RoverSpeed maxSpeed = MaxSpeedByDistance(stepsRemaining);
+        return maxSpeed switch
+        {
+            RoverSpeed.Fast   => new[] { RoverSpeed.Fast, RoverSpeed.Normal, RoverSpeed.Slow },
+            RoverSpeed.Normal => new[] { RoverSpeed.Normal, RoverSpeed.Slow },
+            _                 => new[] { RoverSpeed.Slow }
+        };
+    }
+
+    private static double ApplyMiningTick(double batteryBeforeMining, int tickAtMineral)
+    {
+        bool isDay = SimulationEngine.IsDay(tickAtMineral);
+        return EnergyCalculator.Apply(
+            batteryBeforeMining, RoverActionType.Mine, RoverSpeed.Slow, isDay);
+    }
 
     // ── Q-table interface ─────────────────────────────────────────────────────
 
@@ -590,7 +679,43 @@ public class HybridAgent
     {
         _currentPath.Clear();
         _phase = MissionPhase.Collection;
+        _cachedDistanceField = null;
+        _cachedFieldX = int.MinValue;
+        _cachedFieldY = int.MinValue;
     }
+
+    private int DistanceToBaseSteps(RoverState state, GameMap liveMap)
+    {
+        var baseField = GetBaseDistanceField(liveMap);
+        int steps = FieldDistance(baseField, state.X, state.Y);
+        if (steps != int.MaxValue) return steps;
+
+        double fallback = AStarPathfinder.PathCost(
+            liveMap, state.X, state.Y, liveMap.StartX, liveMap.StartY);
+        return fallback >= double.MaxValue ? int.MaxValue : (int)fallback;
+    }
+
+    private int[,] GetBaseDistanceField(GameMap liveMap)
+    {
+        _baseDistanceField ??= AStarPathfinder.BuildDistanceField(
+            liveMap, liveMap.StartX, liveMap.StartY);
+        return _baseDistanceField;
+    }
+
+    private int[,] GetDistanceField(int x, int y, GameMap liveMap)
+    {
+        if (_cachedDistanceField == null || x != _cachedFieldX || y != _cachedFieldY)
+        {
+            _cachedDistanceField = AStarPathfinder.BuildDistanceField(liveMap, x, y);
+            _cachedFieldX = x;
+            _cachedFieldY = y;
+        }
+
+        return _cachedDistanceField;
+    }
+
+    private static int FieldDistance(int[,] field, int x, int y)
+        => field[x, y];
 
     // ── State builder — 1,800 states (was 1,200) ─────────────────────────────
     // Expanding IsDay (2 values) → SolPhaseBucket (3 values) so the Q-table
@@ -604,16 +729,27 @@ public class HybridAgent
         // 5 battery bands: 0-19, 20-39, 40-59, 60-79, 80-100
         int battBucket = Math.Clamp((int)(state.Battery / 20.0), 0, 4);
 
-        // Nearest mineral distance — 5 bands
-        var nearest    = liveMap.NearestMineral(state.X, state.Y);
-        int distBucket = 4; // none
+        // Nearest mineral distance — based on exact shortest path steps
+        int[,] roverField = GetDistanceField(state.X, state.Y, liveMap);
+        (int x, int y)? nearest = null;
+        int nearestSteps = int.MaxValue;
+
+        foreach (var pos in liveMap.RemainingMinerals)
+        {
+            int steps = FieldDistance(roverField, pos.x, pos.y);
+            if (steps < nearestSteps)
+            {
+                nearestSteps = steps;
+                nearest = pos;
+            }
+        }
+
+        int distBucket = 4; // none or unreachable
         int dirBucket  = 0;
 
-        if (nearest.HasValue)
+        if (nearest.HasValue && nearestSteps < int.MaxValue)
         {
-            double dist = liveMap.ChebyshevDistance(state.X, state.Y,
-                                                     nearest.Value.x, nearest.Value.y);
-            distBucket = dist switch
+            distBucket = nearestSteps switch
             {
                 <= 4  => 0,  // close
                 <= 12 => 1,  // medium
@@ -627,11 +763,15 @@ public class HybridAgent
             dirBucket = (dx >= 0 ? 0 : 1) + (dy >= 0 ? 0 : 2); // 0=SE,1=SW,2=NE,3=NW
         }
 
-        // Urgency: 2 levels (relative — works the same for any duration)
+        // Urgency: based on exact dynamic return estimate
         int ticksRemaining = _totalTicks - state.Tick;
-        double distToBase  = liveMap.ChebyshevDistance(state.X, state.Y,
-                                                        liveMap.StartX, liveMap.StartY);
-        int urgencyBucket = (ticksRemaining <= distToBase * 2 + ReturnSafetyBuffer * 3) ? 0 : 1;
+        int returnSteps = DistanceToBaseSteps(state, liveMap);
+        var returnPlan = returnSteps == int.MaxValue
+            ? new DynamicLegPlan(false, 0, state.Battery, state.Battery)
+            : SimulateDynamicLeg(state.Tick, returnSteps, state.Battery);
+        int urgencyBucket = (!returnPlan.IsFeasible
+                             || ticksRemaining <= returnPlan.Ticks + UrgencyBufferTicks)
+            ? 0 : 1;
 
         // Minerals left: 3 levels
         int mineralsLeft = liveMap.RemainingMinerals.Count switch
@@ -674,6 +814,29 @@ public class HybridAgent
         HybridDecision.Standby            => 3,
         _                                 => 0
     };
+
+    private readonly record struct LegPlan(
+        bool       IsFeasible,
+        int        Ticks,
+        RoverSpeed Speed,
+        double     FinalBattery,
+        double     MinBattery);
+
+    private readonly record struct DynamicLegPlan(
+        bool   IsFeasible,
+        int    Ticks,
+        double FinalBattery,
+        double MinBattery);
+
+    private readonly record struct MineralCandidatePlan(
+        int    X,
+        int    Y,
+        int    StepsToMineral,
+        int    StepsHome,
+        int    TicksToMineral,
+        int    TickAfterMine,
+        double BatteryAfterMine,
+        double BaseScore);
 }
 
 // ── Supporting types ──────────────────────────────────────────────────────────

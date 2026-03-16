@@ -53,6 +53,8 @@ public class SimulationRunner
     private const double Lambda           = 0.7;  // eligibility trace decay (Q-λ)
     private const double TraceThreshold   = 1e-4; // prune traces below this value
     private const double ActionCount      = 4;    // HybridDecision.Count
+    private const double PerBetaStart     = 0.4;  // PER importance-sampling beta (start)
+    private const double PerBetaEnd       = 1.0;  // PER importance-sampling beta (end)
 
     public SimulationRunner(GameMap map, int durationHours, string modelPath = "model")
     {
@@ -176,13 +178,17 @@ public class SimulationRunner
             int epsDone = epBase + thisCount;
             if (epsDone >= WarmupEpisodes && buffer.IsReady(BatchSize))
             {
-                var (batch, indices) = buffer.Sample(BatchSize);
+                double betaProgress = Math.Clamp(epsDone / (double)Math.Max(episodes, 1), 0.0, 1.0);
+                double beta = PerBetaStart + (PerBetaEnd - PerBetaStart) * betaProgress;
+                var (batch, indices, isWeights) = buffer.Sample(BatchSize, beta);
+
                 for (int i = 0; i < batch.Length; i++)
                 {
                     var t = batch[i];
+                    double weightedAlpha = sharedTable.LearningRate * isWeights[i];
                     sharedTable.UpdateByKeyWithAlpha(
                         t.StateKey, t.ActionIdx, t.Reward, t.NextStateKey,
-                        (int)ActionCount, sharedTable.LearningRate);
+                        (int)ActionCount, weightedAlpha);
 
                     double newErr = sharedTable.GetTDError(
                         t.StateKey, t.ActionIdx, t.Reward, t.NextStateKey,

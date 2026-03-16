@@ -265,7 +265,7 @@ public partial class MainViewModel : ObservableObject
         if (GameMap == null) return;
 
         IsTraining       = true;
-        bool resuming    = File.Exists(SimulationRunner.ResolveModelPath(_modelPath) + ".qtable.json");
+        bool resuming    = File.Exists(SimulationRunner.ResolveModelPath(_modelPath) + ".json");
         TrainingStatus   = resuming
             ? "▶ Resuming Q-table training from saved model..."
             : "🧠 Training Hybrid Q-table agent...";

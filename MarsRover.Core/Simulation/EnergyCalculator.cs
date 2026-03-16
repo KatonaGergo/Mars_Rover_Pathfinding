@@ -89,4 +89,41 @@ public static class EnergyCalculator
     /// </summary>
     public static int TripTicks(int pathSteps, RoverSpeed speed)
         => (int)Math.Ceiling(pathSteps / (double)(int)speed);
+
+    /// <summary>
+    /// Simulates a movement leg tick-by-tick and returns both final and minimum
+    /// battery reached during the trip. This catches unsafe legs where the rover
+    /// would dip too low mid-trip even if the net delta looks acceptable.
+    /// </summary>
+    public static TripSimulationResult SimulateTrip(
+        int startTick,
+        int pathSteps,
+        RoverSpeed speed,
+        int totalTicks,
+        double startBattery)
+    {
+        int ticks   = TripTicks(pathSteps, speed);
+        double batt = Math.Clamp(startBattery, MinBattery, MaxBattery);
+        double min  = batt;
+
+        for (int t = 0; t < ticks; t++)
+        {
+            int  futureTick = Math.Min(startTick + t, totalTicks - 1);
+            bool isDay      = SimulationEngine.IsDay(futureTick);
+            batt            = Apply(batt, RoverActionType.Move, speed, isDay);
+            if (batt < min) min = batt;
+        }
+
+        return new TripSimulationResult(
+            Ticks:        ticks,
+            NetDelta:     batt - startBattery,
+            FinalBattery: batt,
+            MinBattery:   min);
+    }
 }
+
+public readonly record struct TripSimulationResult(
+    int    Ticks,
+    double NetDelta,
+    double FinalBattery,
+    double MinBattery);

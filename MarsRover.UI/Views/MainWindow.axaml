@@ -8,7 +8,8 @@
         Title="MARS ROVER — Mission Control"
         Width="1400" Height="900"
         MinWidth="1100" MinHeight="700"
-        Background="#0D0F14">
+        Background="#0D0F14"
+        Icon="/Assets/logo.ico">
 
     <Grid ColumnDefinitions="*, 340" RowDefinitions="Auto, *" Margin="10">
 
