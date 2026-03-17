@@ -13,7 +13,7 @@
         ExtendClientAreaTitleBarHeightHint="-1"
         Background="#050507"
         Icon="/Assets/logo.ico"
-        Title="RELATIVO - Mars Rover Mission Control">
+        Title="RELATIVO - Mars Rover Q-Learning Agent">
 
     <Window.Resources>
         <SolidColorBrush x:Key="BaseBlackBrush" Color="#050507"/>
