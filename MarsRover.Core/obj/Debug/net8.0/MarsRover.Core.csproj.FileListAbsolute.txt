@@ -26,3 +26,16 @@ C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\_temp_build\MarsRover.
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\_temp_build\MarsRover.Core.pdb
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\bin\Debug\net8.0\MarsRover.Core.dll
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\ref\MarsRover.Core.dll
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\bin\Debug\net8.0\MarsRover.Core.deps.json
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\bin\Debug\net8.0\MarsRover.Core.dll
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\bin\Debug\net8.0\MarsRover.Core.pdb
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.csproj.AssemblyReference.cache
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.AssemblyInfoInputs.cache
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.AssemblyInfo.cs
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.csproj.CoreCompileInputs.cache
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.sourcelink.json
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.dll
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\refint\MarsRover.Core.dll
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.pdb
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\ref\MarsRover.Core.dll

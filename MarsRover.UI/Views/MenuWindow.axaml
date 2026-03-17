@@ -13,7 +13,7 @@
         ExtendClientAreaTitleBarHeightHint="-1"
         Background="#050507"
         Icon="/Assets/logo.ico"
-        Title="RELATIVO - Mars Rover Q-Learning Agent">
+        Title="RELATIVO - Mars Rover Mission Control">
 
     <Window.Resources>
         <SolidColorBrush x:Key="BaseBlackBrush" Color="#050507"/>
@@ -103,49 +103,7 @@
                 </LinearGradientBrush>
             </Border.Background>
         </Border>
-
-        <Canvas IsHitTestVisible="False">
-            <Ellipse Width="1900" Height="860"
-                     Canvas.Left="-220"
-                     Canvas.Top="410">
-                <Ellipse.Fill>
-                    <RadialGradientBrush Center="0.63,0.22" GradientOrigin="0.63,0.22" RadiusX="0.95" RadiusY="0.95">
-                        <GradientStop Offset="0" Color="#B3FF9A42"/>
-                        <GradientStop Offset="0.34" Color="#9DE2772C"/>
-                        <GradientStop Offset="0.66" Color="#7C903919"/>
-                        <GradientStop Offset="1" Color="#1D160C08"/>
-                    </RadialGradientBrush>
-                </Ellipse.Fill>
-            </Ellipse>
-
-            <Ellipse Width="1780" Height="240"
-                     Canvas.Left="-140"
-                     Canvas.Top="336"
-                     Opacity="0.95">
-                <Ellipse.Fill>
-                    <RadialGradientBrush Center="0.72,0.48" GradientOrigin="0.72,0.48" RadiusX="0.9" RadiusY="0.9">
-                        <GradientStop Offset="0" Color="#CCFFB15D"/>
-                        <GradientStop Offset="0.42" Color="#55FF8A34"/>
-                        <GradientStop Offset="1" Color="#00FF8A34"/>
-                    </RadialGradientBrush>
-                </Ellipse.Fill>
-            </Ellipse>
-
-            <Ellipse Width="1560" Height="620"
-                     Canvas.Left="-80"
-                     Canvas.Top="500"
-                     Opacity="0.38">
-                <Ellipse.Fill>
-                    <RadialGradientBrush Center="0.65,0.12" GradientOrigin="0.65,0.12" RadiusX="0.9" RadiusY="0.9">
-                        <GradientStop Offset="0" Color="#78FF8C35"/>
-                        <GradientStop Offset="0.58" Color="#2AFF732A"/>
-                        <GradientStop Offset="1" Color="#00000000"/>
-                    </RadialGradientBrush>
-                </Ellipse.Fill>
-            </Ellipse>
-
-        </Canvas>
-
+        <Image Source="C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.UI\Assets\MarsBack.png" Stretch="UniformToFill"/>
         <Border IsHitTestVisible="False" Opacity="0.1">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0.03,0" SpreadMethod="Repeat">
@@ -178,22 +136,7 @@
             </Border.Background>
         </Border>
 
-        <Canvas IsHitTestVisible="False" Opacity="0.08">
-            <Ellipse Width="2" Height="2" Fill="#66FF8A3A" Canvas.Left="120" Canvas.Top="160"/>
-            <Ellipse Width="1.5" Height="1.5" Fill="#44FFC68D" Canvas.Left="260" Canvas.Top="420"/>
-            <Ellipse Width="1.8" Height="1.8" Fill="#59FF8A3A" Canvas.Left="540" Canvas.Top="102"/>
-            <Ellipse Width="1.2" Height="1.2" Fill="#48FFD0A1" Canvas.Left="785" Canvas.Top="250"/>
-            <Ellipse Width="2" Height="2" Fill="#66FF8A3A" Canvas.Left="980" Canvas.Top="170"/>
-            <Ellipse Width="1.4" Height="1.4" Fill="#44FFC68D" Canvas.Left="1170" Canvas.Top="410"/>
-            <Ellipse Width="2" Height="2" Fill="#52FF8A3A" Canvas.Left="1330" Canvas.Top="290"/>
-            <Ellipse Width="1.2" Height="1.2" Fill="#3FFF8A3A" Canvas.Left="1110" Canvas.Top="640"/>
-            <Ellipse Width="1.6" Height="1.6" Fill="#44FFC68D" Canvas.Left="380" Canvas.Top="680"/>
-            <Ellipse Width="1.2" Height="1.2" Fill="#59FF8A3A" Canvas.Left="1420" Canvas.Top="170"/>
-            <Ellipse Width="1.4" Height="1.4" Fill="#40FF8A3A" Canvas.Left="1490" Canvas.Top="350"/>
-            <Ellipse Width="1.2" Height="1.2" Fill="#44FFC68D" Canvas.Left="1280" Canvas.Top="540"/>
-            <Ellipse Width="1.5" Height="1.5" Fill="#40FF8A3A" Canvas.Left="930" Canvas.Top="610"/>
-            <Ellipse Width="1.1" Height="1.1" Fill="#48FFC68D" Canvas.Left="470" Canvas.Top="590"/>
-        </Canvas>
+     
 
         <Border Margin="34" CornerRadius="16"
                 BorderBrush="#44E97C2C" BorderThickness="1"
@@ -253,54 +196,24 @@
 
                 <Grid Grid.Row="1" Margin="14,18,14,14" ClipToBounds="True">
                     <Viewbox HorizontalAlignment="Center" VerticalAlignment="Center"
-                             Stretch="Uniform" MaxWidth="700" MaxHeight="560">
+                             Stretch="Uniform" MaxWidth="900" MaxHeight="760">
                     <StackPanel Width="620" HorizontalAlignment="Center" VerticalAlignment="Center"
                                 Margin="0,8,0,0" Spacing="6">
-                        <Border Width="300" Height="184"
+                        <Border Width="325" Height="250"
                                 HorizontalAlignment="Center"
                                 Margin="0,2,0,4"
                                 Background="#140D0908"
                                 BorderBrush="#55EF7E2A"
                                 BorderThickness="1"
                                 CornerRadius="6">
-                            <Grid Margin="14" RowDefinitions="*,Auto">
-                                <Border Width="172" Height="90"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        CornerRadius="45"
-                                        BorderBrush="#44EF7E2A"
-                                        BorderThickness="1"
-                                        Background="#120B0907">
-                                    <TextBlock Text="LOGO MAJD"
-                                               FontFamily="Bahnschrift, Segoe UI"
-                                               FontWeight="SemiBold"
-                                               FontSize="25"
-                                               Foreground="#CCEF9A57"
-                                               LetterSpacing="4"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"/>
-                                </Border>
+                            <Grid Margin="5" RowDefinitions="*,Auto" >
+                              
+                                   <Image Source="C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.UI\Assets\realativo.png" MaxHeight="420" MaxWidth="560"/>
+                             
                             </Grid>
                         </Border>
 
-                        <TextBlock Text="RELATIVO"
-                                   HorizontalAlignment="Center"
-                                   Foreground="#FFFFA460"
-                                   FontFamily="Bahnschrift, Segoe UI"
-                                   FontWeight="Bold"
-                                   FontSize="60"
-                                   LetterSpacing="4.8"/>
-
-                        <TextBlock Text="MARS ROVER"
-                                   HorizontalAlignment="Center"
-                                   Foreground="#FFEAA06A"
-                                   FontFamily="Bahnschrift, Segoe UI"
-                                   FontWeight="SemiBold"
-                                   FontSize="42"
-                                   LetterSpacing="7"
-                                   Margin="0,-8,0,0"/>
-
-                        <TextBlock Text="Q-Learning Pathfinding System"
+                        <TextBlock Text="Autonomous Exploration System"
                                    HorizontalAlignment="Center"
                                    Foreground="#FFE0B487"
                                    FontFamily="Consolas, Cascadia Mono"
