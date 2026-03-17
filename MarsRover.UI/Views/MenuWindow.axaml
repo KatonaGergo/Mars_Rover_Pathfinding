@@ -144,25 +144,6 @@
                 </Ellipse.Fill>
             </Ellipse>
 
-            <Path Data="M 0 560 C 360 430, 620 430, 1020 482"
-                  Stroke="#36FF8431"
-                  StrokeThickness="1.2"/>
-            <Path Data="M 0 540 C 340 420, 610 418, 1000 468"
-                  Stroke="#24FF8431"
-                  StrokeThickness="1"/>
-            <Path Data="M 80 510 C 230 488, 380 460, 560 420"
-                  Stroke="#1EFB7C2D"
-                  StrokeThickness="0.8"/>
-
-            <Path Data="M 190 585 C 300 560, 410 538, 520 512"
-                  Stroke="#20FF8E3A"
-                  StrokeThickness="0.9"/>
-            <Path Data="M 260 602 C 360 582, 470 564, 620 538"
-                  Stroke="#19FF8E3A"
-                  StrokeThickness="0.8"/>
-            <Path Data="M 1040 560 C 1160 540, 1250 530, 1410 518"
-                  Stroke="#16FF8E3A"
-                  StrokeThickness="0.8"/>
         </Canvas>
 
         <Border IsHitTestVisible="False" Opacity="0.1">
@@ -319,7 +300,7 @@
                                    LetterSpacing="7"
                                    Margin="0,-8,0,0"/>
 
-                        <TextBlock Text="Autonomous Exploration System"
+                        <TextBlock Text="Q-Learning Pathfinding System"
                                    HorizontalAlignment="Center"
                                    Foreground="#FFE0B487"
                                    FontFamily="Consolas, Cascadia Mono"
