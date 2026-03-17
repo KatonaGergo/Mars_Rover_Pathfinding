@@ -48,7 +48,6 @@ public class SimulationRunner
     private const int    BufferCapacity   = 20_000;
     private const int    BatchSize        = 64;
     private const int    WarmupEpisodes   = 10;   // episode-based warmup (not step-based)
-    private const int    ProgressInterval = 10;
     private static readonly int ParallelThreads = Math.Max(4, Environment.ProcessorCount);    // parallel episode collectors
     private const double Lambda           = 0.7;  // eligibility trace decay (Q-λ)
     private const double TraceThreshold   = 1e-4; // prune traces below this value
@@ -120,9 +119,6 @@ public class SimulationRunner
         // We iterate in groups of ParallelThreads episodes
         int iterations = (int)Math.Ceiling(episodes / (double)episodeBatch);
 
-        // Best snapshot for ghost replay (updated each iteration)
-        EpisodeSnapshot? bestSnapshot = null;
-
         for (int iter = 0; iter < iterations; iter++)
         {
             int epBase       = iter * episodeBatch;
@@ -143,10 +139,11 @@ public class SimulationRunner
                 });
 
             // ── SERIAL MERGE PHASE ────────────────────────────────────────────
-            EpisodeData? bestThisIter = null;
-
-            foreach (var ep in collected)
+            for (int i = 0; i < collected.Length; i++)
             {
+                var ep = collected[i];
+                int epsDone = epBase + i + 1;
+
                 allRewards.Add(ep.TotalReward);
 
                 // ② ELIGIBILITY TRACES: always apply to sharedTable first
@@ -156,7 +153,6 @@ public class SimulationRunner
                 if (ep.MineralsCollected > bestMinerals)
                 {
                     bestMinerals = ep.MineralsCollected;
-                    bestThisIter = ep;
                     // Clone AFTER traces applied — bestTable now contains the
                     // learning FROM the winning episode, not just the policy
                     // that generated it. This is the table deployment should use.
@@ -172,13 +168,30 @@ public class SimulationRunner
                     buffer.Push(t.StateKey, t.ActionIdx, t.Reward, t.NextStateKey,
                                 t.IsTerminal, Math.Abs(tdErr) + 1e-4);
                 }
+
+                // Epsilon decay: once per completed episode.
+                epsilon = Math.Max(epsilonMin, epsilon * epsilonDecay);
+
+                // Emit one progress item per completed run using current run metrics,
+                // not batch averages or best-only values.
+                onProgress?.Invoke(new TrainingProgress(
+                    Episode:      epsDone,
+                    TotalEps:     episodes,
+                    Epsilon:      epsilon,
+                    LastReward:   ep.TotalReward,
+                    BestMinerals: bestMinerals,
+                    StatesKnown:  sharedTable.StateCount,
+                    BufferSize:   buffer.Count,
+                    LastBattery:  ep.EndBattery,
+                    LastMinerals: ep.MineralsCollected,
+                    Snapshot:     BuildSnapshot(ep, epsDone)));
             }
 
             // ③ PER REPLAY: sample and update Q-table once buffer is warm
-            int epsDone = epBase + thisCount;
-            if (epsDone >= WarmupEpisodes && buffer.IsReady(BatchSize))
+            int epsDoneBatch = epBase + thisCount;
+            if (epsDoneBatch >= WarmupEpisodes && buffer.IsReady(BatchSize))
             {
-                double betaProgress = Math.Clamp(epsDone / (double)Math.Max(episodes, 1), 0.0, 1.0);
+                double betaProgress = Math.Clamp(epsDoneBatch / (double)Math.Max(episodes, 1), 0.0, 1.0);
                 double beta = PerBetaStart + (PerBetaEnd - PerBetaStart) * betaProgress;
                 var (batch, indices, isWeights) = buffer.Sample(BatchSize, beta);
 
@@ -199,32 +212,6 @@ public class SimulationRunner
 
             // ③ LEARNING RATE DECAY: once per iteration
             sharedTable.DecayLearningRate();
-
-            // Epsilon decay: once per episode-equivalent
-            for (int i = 0; i < thisCount; i++)
-                epsilon = Math.Max(epsilonMin, epsilon * epsilonDecay);
-
-            // Update best snapshot for ghost replay
-            if (bestThisIter != null)
-                bestSnapshot = BuildSnapshot(bestThisIter, epBase);
-
-            // Report every iteration — fires every ParallelThreads episodes.
-            // The Episode field carries the real cumulative count so the chart
-            // X-axis is always accurate.
-            {
-                var snap = bestSnapshot ?? (collected.Length > 0
-                    ? BuildSnapshot(collected[0], epBase) : null);
-
-                onProgress?.Invoke(new TrainingProgress(
-                    Episode:      epsDone,
-                    TotalEps:     episodes,
-                    Epsilon:      epsilon,
-                    LastReward:   allRewards.Count > 0 ? allRewards[^1] : 0,
-                    BestMinerals: bestMinerals,
-                    StatesKnown:  sharedTable.StateCount,
-                    BufferSize:   buffer.Count,
-                    Snapshot:     snap));
-            }
         }
 
         // Save the best checkpoint — the table that actually achieved bestMinerals
@@ -327,7 +314,8 @@ public class SimulationRunner
             TotalReward:       totalReward,
             MineralsCollected: final.TotalMinerals,
             BatteryDied:       engine.BatteryDead,
-            ReturnedHome:      returnedOk);
+            ReturnedHome:      returnedOk,
+            EndBattery:        final.Battery);
     }
 
     // ── ① Eligibility Traces ──────────────────────────────────────────────────
@@ -571,7 +559,8 @@ internal record EpisodeData(
     double                    TotalReward,
     int                       MineralsCollected,
     bool                      BatteryDied,
-    bool                      ReturnedHome);
+    bool                      ReturnedHome,
+    double                    EndBattery);
 
 internal class ModelMeta
 {

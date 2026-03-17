@@ -10,6 +10,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Opened += (_, _) => UiDisplaySettings.ApplyTo(this);
 
         if (DataContext is MainViewModel vm)
             vm.PickFileAsync = PickMapFileAsync;

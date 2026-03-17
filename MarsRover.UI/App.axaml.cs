@@ -2,7 +2,6 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using MarsRover.UI.Views;
-using MarsRover.UI.ViewModels;
 
 namespace MarsRover.UI;
 
@@ -14,11 +13,11 @@ public class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow
-            {
-                DataContext = new MainViewModel()
-            };
+            var menuWindow = new MenuWindow();
+            UiDisplaySettings.ApplyTo(menuWindow);
+            desktop.MainWindow = menuWindow;
         }
+
         base.OnFrameworkInitializationCompleted();
     }
 }

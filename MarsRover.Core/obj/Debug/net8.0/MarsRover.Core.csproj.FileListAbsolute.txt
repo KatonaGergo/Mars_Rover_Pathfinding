@@ -11,7 +11,6 @@ C:\Users\Dári Andrea\Desktop\fixing\MarsRover.Core\obj\Debug\net8.0\refint\Mars
 C:\Users\Dári Andrea\Desktop\fixing\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.pdb
 C:\Users\Dári Andrea\Desktop\fixing\MarsRover.Core\obj\Debug\net8.0\ref\MarsRover.Core.dll
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\bin\Debug\net8.0\MarsRover.Core.deps.json
-C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\bin\Debug\net8.0\MarsRover.Core.dll
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\bin\Debug\net8.0\MarsRover.Core.pdb
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.csproj.AssemblyReference.cache
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.GeneratedMSBuildEditorConfig.editorconfig
@@ -22,4 +21,8 @@ C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\obj\Deb
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.dll
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\refint\MarsRover.Core.dll
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.pdb
+C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\_temp_build\MarsRover.Core.deps.json
+C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\_temp_build\MarsRover.Core.dll
+C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\_temp_build\MarsRover.Core.pdb
+C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\bin\Debug\net8.0\MarsRover.Core.dll
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\ref\MarsRover.Core.dll

@@ -13,6 +13,8 @@
           "Avalonia.Fonts.Inter": "11.1.0",
           "Avalonia.Themes.Fluent": "11.1.0",
           "CommunityToolkit.Mvvm": "8.2.2",
+          "LibVLCSharp": "3.8.5",
+          "LibVLCSharp.Avalonia": "3.8.5",
           "LiveChartsCore.SkiaSharpView.Avalonia": "2.0.0-rc2",
           "MarsRover.Core": "1.0.0"
         },
@@ -278,6 +280,26 @@
             "rid": "win-x86",
             "assetType": "native",
             "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "LibVLCSharp/3.8.5": {
+        "runtime": {
+          "lib/net6.0/LibVLCSharp.dll": {
+            "assemblyVersion": "3.8.5.0",
+            "fileVersion": "3.8.5.0"
+          }
+        }
+      },
+      "LibVLCSharp.Avalonia/3.8.5": {
+        "dependencies": {
+          "Avalonia": "11.1.0",
+          "LibVLCSharp": "3.8.5"
+        },
+        "runtime": {
+          "lib/netstandard2.0/LibVLCSharp.Avalonia.dll": {
+            "assemblyVersion": "3.8.5.0",
+            "fileVersion": "3.8.5.0"
           }
         }
       },
@@ -570,6 +592,20 @@
       "sha512": "sha512-DpF9JBzwws2dupOLnjME65hxQWWbN/GD40AoTkwB4S05WANvxo3n81AnQJKxWDCnrWfWhLPB36OF27TvEqzb/A==",
       "path": "harfbuzzsharp.nativeassets.win32/7.3.0.2",
       "hashPath": "harfbuzzsharp.nativeassets.win32.7.3.0.2.nupkg.sha512"
+    },
+    "LibVLCSharp/3.8.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-dO8YNU5La0wtUM7mUs+V5PBXF9bDTZ5jW+YB2u4cdq633Q+tHAX2HyJrUVaDhH2VvdPVFDghbKfH/GdvHdya6g==",
+      "path": "libvlcsharp/3.8.5",
+      "hashPath": "libvlcsharp.3.8.5.nupkg.sha512"
+    },
+    "LibVLCSharp.Avalonia/3.8.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-64Gaa//MteffzX0wqTn56WQKxibomrnm28aHwYWrTJ/hQXEIzsyRCkFEIR4JyRjn7nu+39vt3IvVCJxvQEPSlQ==",
+      "path": "libvlcsharp.avalonia/3.8.5",
+      "hashPath": "libvlcsharp.avalonia.3.8.5.nupkg.sha512"
     },
     "LiveChartsCore/2.0.0-rc2": {
       "type": "package",

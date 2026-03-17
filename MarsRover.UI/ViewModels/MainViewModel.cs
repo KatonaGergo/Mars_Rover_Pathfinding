@@ -19,6 +19,12 @@ namespace MarsRover.UI.ViewModels;
 /// </summary>
 public partial class MainViewModel : ObservableObject
 {
+    private enum TrainingReplayMode
+    {
+        Fast,
+        StepByStep
+    }
+
     // ── Simulation state ─────────────────────────────────────────────────────
     [ObservableProperty] private int    _durationHours   = 48;
     [ObservableProperty] private int    _trainingEpisodes = 1000;
@@ -51,6 +57,7 @@ public partial class MainViewModel : ObservableObject
 
     // ── Map + model path ─────────────────────────────────────────────────────
     [ObservableProperty] private GameMap? _gameMap;
+    public bool HasMapLoaded => GameMap != null;
     private string _modelPath = "q_table"; // base path — runner appends .weights.json / .meta.json
     private string _mapPath   = "";           // stored on map load — used for run log
     [ObservableProperty] private bool _hasSavedModel = false;
@@ -61,6 +68,7 @@ public partial class MainViewModel : ObservableObject
     // ── Log & playback ───────────────────────────────────────────────────────
     private List<SimulationLogEntry> _log = new();
     private int                      _playbackIndex = 0;
+    private int                      _lastMoveLogTick = -1; // avoid duplicate move logs on expanded sub-steps
     private DispatcherTimer          _playbackTimer;
 
     // ── Event log (last 20 lines) ─────────────────────────────────────────────
@@ -84,8 +92,9 @@ public partial class MainViewModel : ObservableObject
     // Map is visible when neither chart nor ghost is showing
     public bool ShowMapView => !ShowTrainingChart && !ShowGhostReplay;
 
-    partial void OnShowTrainingChartChanged(bool _) => OnPropertyChanged(nameof(ShowMapView));
-    partial void OnShowGhostReplayChanged(bool _)   => OnPropertyChanged(nameof(ShowMapView));
+    partial void OnShowTrainingChartChanged(bool value) => OnPropertyChanged(nameof(ShowMapView));
+    partial void OnShowGhostReplayChanged(bool value)   => OnPropertyChanged(nameof(ShowMapView));
+    partial void OnGameMapChanged(GameMap? value)       => OnPropertyChanged(nameof(HasMapLoaded));
 
     // ── Simulation chart series (playback) ────────────────────────────────────
     public ISeries[] BatterySeries { get; }
@@ -98,28 +107,52 @@ public partial class MainViewModel : ObservableObject
     // ── Training chart series (per-episode) ───────────────────────────────────
     public ISeries[] TrainingMineralSeries  { get; }
     public ISeries[] TrainingRewardSeries   { get; }
+    public ISeries[] TrainingBatterySeries  { get; }
     public Axis[]    EpisodeAxis            { get; }
     public Axis[]    MineralYAxis           { get; }
     public Axis[]    RewardYAxis            { get; }
+    public Axis[]    BatteryYAxis           { get; }
 
     private readonly ObservableCollection<LiveChartsCore.Defaults.ObservablePoint> _epMineralPoints = new();
     private readonly ObservableCollection<LiveChartsCore.Defaults.ObservablePoint> _epRewardPoints  = new();
-    // Rolling average window for smoothed reward line
-    private readonly Queue<double> _rewardWindow = new();
-    private const    int           RewardWindowSize = 20;
-    private const    int           ChartUpdateInterval = 4;  // matches SimulationRunner.ParallelThreads (episodes per iteration)
+    private readonly ObservableCollection<LiveChartsCore.Defaults.ObservablePoint> _epBatteryPoints = new();
+    private readonly Queue<TrainingChartSample> _pendingTrainingChartSamples = new();
+    private readonly Queue<MarsRover.Core.Algorithm.EpisodeSnapshot> _pendingGhostSnapshots = new();
+    private string? _pendingCompletionStatus;
+    private bool _pendingResetDisplayToStart;
+    private TrainingReplayMode _trainingReplayMode = TrainingReplayMode.StepByStep;
+
+    // Fast replay batches chart points to mimic the old, averaged preview mode.
+    private const int FastReplayBatchSize = 4;
+    private int _fastReplayBatchCount;
+    private double _fastReplayMineralsSum;
+    private double _fastReplayRewardSum;
+    private double _fastReplayBatterySum;
+    private TrainingChartSample? _fastReplayLastSample;
+    private MarsRover.Core.Algorithm.EpisodeSnapshot? _fastPendingSnapshot;
+
+    private readonly record struct TrainingChartSample(
+        int Episode,
+        int RunMinerals,
+        double LastReward,
+        double LastBattery,
+        int TotalEps,
+        double Epsilon,
+        int BestMinerals,
+        int BufferSize,
+        int StatesKnown);
 
     public MainViewModel()
     {
         // Set up playback timer (interval adjusted by PlaybackSpeed)
         _playbackTimer          = new DispatcherTimer();
-        _playbackTimer.Interval = TimeSpan.FromMilliseconds(200);
         _playbackTimer.Tick    += OnPlaybackTick;
 
         // Ghost replay timer — fast, plays one step per tick
         _ghostTimer          = new DispatcherTimer();
-        _ghostTimer.Interval = TimeSpan.FromMilliseconds(18); // ~55 fps ghost
         _ghostTimer.Tick    += OnGhostTick;
+
+        UpdateTimerInterval();
 
         // Chart setup
         BatterySeries = new ISeries[]
@@ -165,17 +198,31 @@ public partial class MainViewModel : ObservableObject
             }
         };
 
-        // Training chart: smoothed total reward per episode
+        // Training chart: raw total reward per episode
         TrainingRewardSeries = new ISeries[]
         {
             new LineSeries<LiveChartsCore.Defaults.ObservablePoint>
             {
-                Name         = "Reward (smoothed)",
+                Name         = "Reward / Episode",
                 Values       = _epRewardPoints,
                 Stroke       = new SolidColorPaint(SKColor.Parse("#D4521A")) { StrokeThickness = 2 },
                 Fill         = new SolidColorPaint(SKColor.Parse("#D4521A18")),
                 GeometrySize = 0,
                 LineSmoothness = 0.6
+            }
+        };
+
+        // Training chart: battery at end of episode
+        TrainingBatterySeries = new ISeries[]
+        {
+            new LineSeries<LiveChartsCore.Defaults.ObservablePoint>
+            {
+                Name           = "Battery / Episode",
+                Values         = _epBatteryPoints,
+                Stroke         = new SolidColorPaint(SKColor.Parse("#FFD089")) { StrokeThickness = 2 },
+                Fill           = new SolidColorPaint(SKColor.Parse("#FFD08918")),
+                GeometrySize   = 0,
+                LineSmoothness = 0.4
             }
         };
 
@@ -195,8 +242,14 @@ public partial class MainViewModel : ObservableObject
             new Axis { Name = "Reward", LabelsPaint = new SolidColorPaint(SKColor.Parse("#D4521A")) }
         };
 
+        BatteryYAxis = new Axis[]
+        {
+            new Axis { Name = "Battery", LabelsPaint = new SolidColorPaint(SKColor.Parse("#FFD089")),
+                       MinLimit = 0, MaxLimit = 100 }
+        };
+
         // No map loaded on startup — user must click Load Map
-        TrainingStatus = "No map loaded. Click '📂 LOAD MAP' to begin.";
+        TrainingStatus = "No map loaded. Click 'LOAD MAP' to begin.";
     }
 
     // ── Commands ──────────────────────────────────────────────────────────────
@@ -221,8 +274,8 @@ public partial class MainViewModel : ObservableObject
         ShowGhostReplay   = true;
         ShowTrainingChart = false;
 
-        // If trail is loaded but timer not running (user said "no" to watch),
-        // restart playback from beginning so they can watch on demand
+        // If trail is loaded but timer not running, restart playback from
+        // beginning so it can be watched on demand.
         if (GhostTrail != null && GhostTrail.Count > 0 && !_ghostTimer.IsEnabled)
         {
             GhostIndex     = 0;
@@ -237,26 +290,28 @@ public partial class MainViewModel : ObservableObject
     {
         if (GameMap == null)
         {
-            TrainingStatus = "No map loaded. Click '📂 LOAD MAP' first.";
+            TrainingStatus = "No map loaded. Click 'LOAD MAP' first.";
             return;
         }
-        // Show popup first — actual training starts on WatchTraining or SkipWatch
+        // Show replay-mode popup first — training starts after mode selection.
         ShowWatchPrompt = true;
     }
 
     [RelayCommand]
-    private async Task WatchTraining()
+    private async Task StartFastReplay()
     {
-        _userWantsToWatch = true;
-        ShowWatchPrompt   = false;
+        _userWantsToWatch   = true;
+        _trainingReplayMode = TrainingReplayMode.Fast;
+        ShowWatchPrompt     = false;
         await StartTraining();
     }
 
     [RelayCommand]
-    private async Task SkipWatch()
+    private async Task StartStepByStepReplay()
     {
-        _userWantsToWatch = false;
-        ShowWatchPrompt   = false;
+        _userWantsToWatch   = true;
+        _trainingReplayMode = TrainingReplayMode.StepByStep;
+        ShowWatchPrompt     = false;
         await StartTraining();
     }
 
@@ -265,22 +320,29 @@ public partial class MainViewModel : ObservableObject
         if (GameMap == null) return;
 
         IsTraining       = true;
-        bool resuming    = File.Exists(SimulationRunner.ResolveModelPath(_modelPath) + ".json");
+        bool resuming    = File.Exists(SimulationRunner.ResolveModelPath(_modelPath) + ".qtable.json");
         TrainingStatus   = resuming
             ? "▶ Resuming Q-table training from saved model..."
             : "🧠 Training Hybrid Q-table agent...";
         TrainingProgress = 0;
+        _pendingCompletionStatus = null;
+        _pendingResetDisplayToStart = false;
 
         // Clear previous training data
         _epMineralPoints.Clear();
         _epRewardPoints.Clear();
-        _rewardWindow.Clear();
+        _epBatteryPoints.Clear();
+        _pendingTrainingChartSamples.Clear();
+        _pendingGhostSnapshots.Clear();
+        _ghostTimer.Stop();
+        ResetFastReplayBatch();
+        _fastPendingSnapshot = null;
 
         ShowGhostReplay   = false;
         ShowTrainingChart = false;
 
         var runner = new SimulationRunner(GameMap, DurationHours, _modelPath);
-        _hasSavedModel = runner.HasSavedModel;
+        HasSavedModel = runner.HasSavedModel;
 
         try
         {
@@ -292,39 +354,53 @@ public partial class MainViewModel : ObservableObject
                     {
                         Dispatcher.UIThread.Post(() =>
                         {
-                            TrainingProgress = p.PercentDone;
-                            TrainingStatus   = $"[Q-table] Ep {p.Episode}/{p.TotalEps} (+4/iter) | " +
-                                               $"ε={p.Epsilon:F3} | " +
-                                               $"Best: {p.BestMinerals} ⛏ | " +
-                                               $"Buffer: {p.BufferSize:N0} | " +
-                                               $"States: {p.StatesKnown:N0}";
+                            if (!_userWantsToWatch)
+                            {
+                                TrainingProgress = p.PercentDone;
+                                TrainingStatus   = FormatTrainingStatus(
+                                    p.Episode, p.TotalEps, p.Epsilon,
+                                    p.BestMinerals, p.BufferSize, p.StatesKnown);
+                            }
+                            else if (_trainingReplayMode == TrainingReplayMode.Fast)
+                            {
+                                TrainingProgress = p.PercentDone;
+                                TrainingStatus   = FormatTrainingStatus(
+                                    p.Episode, p.TotalEps, p.Epsilon,
+                                    p.BestMinerals, p.BufferSize, p.StatesKnown);
+                            }
 
-                            // Push live data to training chart
-                            _epMineralPoints.Add(new(p.Episode, p.BestMinerals));
-
-                            // Rolling average of reward for smooth curve
-                            _rewardWindow.Enqueue(p.LastReward);
-                            if (_rewardWindow.Count > RewardWindowSize)
-                                _rewardWindow.Dequeue();
-                            double smoothed = _rewardWindow.Average();
-                            _epRewardPoints.Add(new(p.Episode, smoothed));
-
-                            // Queue ghost replay snapshot
-                            if (p.Snapshot != null)
-                                StartGhostReplay(p.Snapshot);
+                            HandleTrainingRunCompleted(p);
                         });
                     });
 
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (_trainingReplayMode == TrainingReplayMode.Fast)
+                        FlushFastReplayBatch();
+
+                    // If the user is watching ghost replay, keep the queue alive
+                    // so no episodes are dropped and charts remain in lockstep.
+                    bool keepGhostQueue = _userWantsToWatch
+                                          && _trainingReplayMode == TrainingReplayMode.StepByStep
+                                          && (_ghostTimer.IsEnabled || _pendingGhostSnapshots.Count > 0);
+                    if (!keepGhostQueue)
+                    {
+                        _ghostTimer.Stop();
+                        _pendingGhostSnapshots.Clear();
+                        FlushPendingTrainingChartSamples();
+                    }
+
                     _log              = log;
                     _playbackIndex    = 0;
                     HasLog            = log.Count > 0;
-                    IsTraining        = false;
-                    TrainingProgress  = 100;
-                    ShowGhostReplay   = false;
+                    if (!keepGhostQueue)
+                    {
+                        IsTraining      = false;
+                        TrainingProgress = 100;
+                        ShowGhostReplay = false;
+                    }
                     ShowTrainingChart = false;  // return to map for playback
-                    _hasSavedModel    = true;
+                    HasSavedModel    = true;
 
                     // Save run log to results/ — same output as Console project
                     string? logPath = null;
@@ -332,11 +408,21 @@ public partial class MainViewModel : ObservableObject
                         logPath = MarsRover.Core.Utils.MissionLogger.Save(
                             log, _mapPath, DurationHours, TrainingEpisodes, _modelPath, GameMap);
 
-                    TrainingStatus = $"✅ Training complete — " +
-                                     $"{training.BestMinerals} peak minerals | " +
-                                     $"Model saved to {SimulationRunner.ResolveModelPath(_modelPath)}.qtable.json" +
-                                     (logPath != null ? $" | Log → {logPath}" : "");
-                    ResetDisplayToStart();
+                    string completionStatus = $"✅ Training complete — " +
+                                              $"{training.BestMinerals} peak minerals | " +
+                                              $"Model saved to {SimulationRunner.ResolveModelPath(_modelPath)}.qtable.json" +
+                                              (logPath != null ? $" | Log → {logPath}" : "");
+
+                    if (keepGhostQueue)
+                    {
+                        _pendingCompletionStatus = completionStatus;
+                        _pendingResetDisplayToStart = true;
+                    }
+                    else
+                    {
+                        TrainingStatus = completionStatus;
+                        ResetDisplayToStart();
+                    }
                 });
             });
         }
@@ -369,9 +455,9 @@ public partial class MainViewModel : ObservableObject
 
             // Strip extensions — user may select .weights.json or base name
             _modelPath     = path.Replace(".qtable.json", "").Replace(".meta.json", "");
-            _hasSavedModel = File.Exists(SimulationRunner.ResolveModelPath(_modelPath) + ".qtable.json");
+            HasSavedModel = File.Exists(SimulationRunner.ResolveModelPath(_modelPath) + ".qtable.json");
 
-            TrainingStatus = _hasSavedModel
+            TrainingStatus = HasSavedModel
                 ? $"✅ Model loaded: {System.IO.Path.GetFileName(_modelPath)} — " +
                   $"click Train & Run to fine-tune or Run to deploy."
                 : $"⚠ No model weights found at {SimulationRunner.ResolveModelPath(_modelPath)}.qtable.json";
@@ -458,6 +544,24 @@ public partial class MainViewModel : ObservableObject
 
     private void ApplyLogEntry(SimulationLogEntry e)
     {
+        bool isMove = e.Action.Type == MarsRover.Core.Models.RoverActionType.Move;
+        string eventText = e.EventNote;
+
+        // Multi-step moves are expanded into several playback entries that share
+        // the same Tick. Log movement once at decision time (first sub-step).
+        if (isMove)
+        {
+            if (e.Tick != _lastMoveLogTick)
+            {
+                _lastMoveLogTick = e.Tick;
+                eventText = $"Move decision — {SpeedToUiLabel(e.Action.Speed)}";
+            }
+            else
+            {
+                eventText = string.Empty;
+            }
+        }
+
         CurrentTime      = e.TimeLabel;
         DayNightLabel    = e.DayNightLabel;
         Battery          = e.Battery;
@@ -467,7 +571,8 @@ public partial class MainViewModel : ObservableObject
         TotalMinerals    = e.TotalMinerals;
         DistanceTraveled = e.DistanceTraveled;
         LastAction       = e.Action.ToString();
-        LastEvent        = e.EventNote;
+        if (!string.IsNullOrWhiteSpace(eventText))
+            LastEvent = eventText;
         MissionPhase     = e.Phase;
         RoverX           = e.X;
         RoverY           = e.Y;
@@ -480,54 +585,132 @@ public partial class MainViewModel : ObservableObject
 
         // Event log with reward/punishment context
         string rewardTag = "";
-        if (e.EventNote.Contains("Collected"))      rewardTag = " [+150 reward]";
-        else if (e.EventNote.Contains("Battery died")) rewardTag = " [-300 penalty]";
-        else if (e.EventNote.Contains("no mineral"))  rewardTag = " [-10 penalty]";
+        if (eventText.Contains("Collected"))      rewardTag = " [+150 reward]";
+        else if (eventText.Contains("Battery died")) rewardTag = " [-300 penalty]";
+        else if (eventText.Contains("no mineral"))  rewardTag = " [-10 penalty]";
         else if (e.Battery < 5)                       rewardTag = " [-50 crit batt]";
         else if (e.Battery < 10)                      rewardTag = " [-15 low batt]";
-        else if (!e.IsDay && e.Action.Type == MarsRover.Core.Models.RoverActionType.Move)
+        else if (!e.IsDay && isMove)
                                                       rewardTag = " [-0.5 night move]";
-        var logLine = $"[{e.TimeLabel}] {e.EventNote}{rewardTag}";
-        EventLog.Insert(0, logLine);
-        while (EventLog.Count > 30) EventLog.RemoveAt(EventLog.Count - 1);
+
+        if (!string.IsNullOrWhiteSpace(eventText) || !string.IsNullOrWhiteSpace(rewardTag))
+        {
+            var logLine = $"[{e.TimeLabel}] {eventText}{rewardTag}";
+            EventLog.Insert(0, logLine);
+        }
     }
 
     // ── Ghost replay ─────────────────────────────────────────────────────────
 
-    private MarsRover.Core.Algorithm.EpisodeSnapshot? _pendingSnapshot;
+    private void HandleTrainingRunCompleted(TrainingProgress progress)
+    {
+        var sample = new TrainingChartSample(
+            Episode:      progress.Episode,
+            RunMinerals:  progress.LastMinerals,
+            LastReward:   progress.LastReward,
+            LastBattery:  progress.LastBattery,
+            TotalEps:     progress.TotalEps,
+            Epsilon:      progress.Epsilon,
+            BestMinerals: progress.BestMinerals,
+            BufferSize:   progress.BufferSize,
+            StatesKnown:  progress.StatesKnown);
+
+        if (_userWantsToWatch && _trainingReplayMode == TrainingReplayMode.StepByStep)
+        {
+            _pendingTrainingChartSamples.Enqueue(sample);
+            if (progress.Snapshot != null)
+                StartGhostReplay(progress.Snapshot);
+            else
+                ApplyNextPendingTrainingChartSample();
+            return;
+        }
+
+        if (_userWantsToWatch && _trainingReplayMode == TrainingReplayMode.Fast)
+        {
+            AddFastReplaySample(sample);
+            if (progress.Snapshot != null)
+                StartFastGhostReplay(progress.Snapshot);
+            return;
+        }
+
+        // Not watching live: apply chart points immediately.
+        ApplyTrainingChartSample(sample);
+        if (progress.Snapshot != null)
+            CacheLatestGhostSnapshot(progress.Snapshot);
+    }
+
+    private void ApplyTrainingChartSample(TrainingChartSample sample)
+    {
+        _epMineralPoints.Add(new(sample.Episode, sample.RunMinerals));
+        _epRewardPoints.Add(new(sample.Episode, sample.LastReward));
+        _epBatteryPoints.Add(new(sample.Episode, sample.LastBattery));
+
+        if (_userWantsToWatch)
+        {
+            TrainingProgress = sample.TotalEps > 0
+                ? (double)sample.Episode / sample.TotalEps * 100.0
+                : 0.0;
+            TrainingStatus = FormatTrainingStatus(
+                sample.Episode, sample.TotalEps, sample.Epsilon,
+                sample.BestMinerals, sample.BufferSize, sample.StatesKnown);
+        }
+    }
+
+    private void ApplyNextPendingTrainingChartSample()
+    {
+        if (_pendingTrainingChartSamples.Count == 0) return;
+        ApplyTrainingChartSample(_pendingTrainingChartSamples.Dequeue());
+    }
+
+    private void FlushPendingTrainingChartSamples()
+    {
+        while (_pendingTrainingChartSamples.Count > 0)
+            ApplyTrainingChartSample(_pendingTrainingChartSamples.Dequeue());
+    }
+
+    private void CacheLatestGhostSnapshot(MarsRover.Core.Algorithm.EpisodeSnapshot snap)
+    {
+        GhostTrail  = snap.Steps;
+        GhostIndex  = 0;
+        IsGhostMode = false;
+        GhostStatus = FormatGhostStatus(snap);
+    }
 
     private void StartGhostReplay(MarsRover.Core.Algorithm.EpisodeSnapshot snap)
     {
-        // If a replay is currently running, queue the new snapshot and let the
-        // current one finish — the OnGhostTick end-handler will pick it up.
-        // This prevents the trail from restarting mid-episode every time a new
-        // best is found, which caused the replay to appear frozen.
-        if (_ghostTimer.IsEnabled && GhostTrail != null &&
-            GhostIndex < GhostTrail.Count)
+        _pendingGhostSnapshots.Enqueue(snap);
+        if (_ghostTimer.IsEnabled) return;
+        StartNextGhostReplayFromQueue();
+    }
+
+    private void StartFastGhostReplay(MarsRover.Core.Algorithm.EpisodeSnapshot snap)
+    {
+        if (_ghostTimer.IsEnabled && GhostTrail != null && GhostIndex < GhostTrail.Count)
         {
-            _pendingSnapshot = snap;
-            // Still update the status label so the user sees the new best
-            GhostStatus = $"Episode {snap.Episode} | {snap.MineralsCollected} minerals | " +
-                          (snap.BatteryDied  ? "💀 Battery died" :
-                           snap.ReturnedHome ? "🏠 Returned home" : "⏱ Time up") +
-                          " (queued)";
+            _fastPendingSnapshot = snap;
             return;
         }
 
         LoadSnapshot(snap);
     }
 
+    private void StartNextGhostReplayFromQueue()
+    {
+        if (_ghostTimer.IsEnabled) return;
+        if (_pendingGhostSnapshots.Count == 0) return;
+
+        var next = _pendingGhostSnapshots.Dequeue();
+        LoadSnapshot(next);
+    }
+
     private void LoadSnapshot(MarsRover.Core.Algorithm.EpisodeSnapshot snap)
     {
-        _pendingSnapshot  = null;
         _ghostTimer.Stop();
         GhostTrail  = snap.Steps;
         GhostIndex  = 0;
         IsGhostMode = true;
         GhostEventLog.Clear();
-        GhostStatus = $"Episode {snap.Episode} | {snap.MineralsCollected} minerals | " +
-                      (snap.BatteryDied  ? "💀 Battery died" :
-                       snap.ReturnedHome ? "🏠 Returned home" : "⏱ Time up");
+        GhostStatus = FormatGhostStatus(snap);
 
         if (_userWantsToWatch)
         {
@@ -543,18 +726,42 @@ public partial class MainViewModel : ObservableObject
         if (trail == null || GhostIndex >= trail.Count)
         {
             _ghostTimer.Stop();
+            ApplyNextPendingTrainingChartSample();
 
-            // If a better episode came in while we were playing, start it now
-            if (_pendingSnapshot != null)
+            if (_trainingReplayMode == TrainingReplayMode.Fast && _fastPendingSnapshot != null)
             {
-                var next = _pendingSnapshot;
-                Task.Delay(400).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
-                    LoadSnapshot(next)));
+                var next = _fastPendingSnapshot;
+                _fastPendingSnapshot = null;
+                LoadSnapshot(next);
+                return;
+            }
+
+            // Queue-driven replay keeps charts synchronized with run completions.
+            if (_pendingGhostSnapshots.Count > 0)
+            {
+                int gapMs = (int)Math.Clamp(_ghostTimer.Interval.TotalMilliseconds * 0.6, 60, 320);
+                Task.Delay(gapMs).ContinueWith(_ => Dispatcher.UIThread.Post(StartNextGhostReplayFromQueue));
                 return;
             }
 
             Task.Delay(600).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
             {
+                if (_pendingTrainingChartSamples.Count > 0)
+                    FlushPendingTrainingChartSamples();
+
+                if (_pendingCompletionStatus != null)
+                {
+                    IsTraining = false;
+                    TrainingProgress = 100;
+                    TrainingStatus = _pendingCompletionStatus;
+                    _pendingCompletionStatus = null;
+                }
+                if (_pendingResetDisplayToStart)
+                {
+                    ResetDisplayToStart();
+                    _pendingResetDisplayToStart = false;
+                }
+
                 IsGhostMode = false;
                 if (!_userWantsToWatch) return;
                 ShowGhostReplay = false;
@@ -586,7 +793,6 @@ public partial class MainViewModel : ObservableObject
         {
             var line = $"[Step {GhostIndex}] {evtLabel}{rewardLabel}";
             GhostEventLog.Insert(0, line);
-            while (GhostEventLog.Count > 40) GhostEventLog.RemoveAt(GhostEventLog.Count - 1);
         }
 
         GhostIndex++;
@@ -596,8 +802,16 @@ public partial class MainViewModel : ObservableObject
 
 
 
-    private void ResetDisplayToStart()
+    private void ResetDisplayToStart(bool clearTrainingQueues = true)
     {
+        _lastMoveLogTick = -1;
+        if (clearTrainingQueues)
+        {
+            _pendingGhostSnapshots.Clear();
+            _pendingTrainingChartSamples.Clear();
+            _fastPendingSnapshot = null;
+            ResetFastReplayBatch();
+        }
         Battery          = 100;
         MineralsB        = MineralsY = MineralsG = TotalMinerals = 0;
         DistanceTraveled = 0;
@@ -624,7 +838,88 @@ public partial class MainViewModel : ObservableObject
 
     private void UpdateTimerInterval()
     {
-        // Speed 1x = 200ms | Speed 10x = 20ms
-        _playbackTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(20, 200.0 / PlaybackSpeed));
+        // One speed slider controls both playback modes, with a nonlinear curve
+        // so low values are meaningfully slow (watchable) for ghost replay.
+        double speed = Math.Clamp(PlaybackSpeed, 1.0, 20.0);
+        double t     = (speed - 1.0) / 19.0;         // 0..1
+        double eased = Math.Pow(t, 1.35);            // expands low-speed range
+
+        // Simulation playback: 1 => 550ms, 20 => 20ms
+        _playbackTimer.Interval = TimeSpan.FromMilliseconds(Lerp(550.0, 20.0, eased));
+
+        // Ghost replay: use an exponential curve so speed=1 is truly slow.
+        // This keeps high-end fast while making low-end values easy to watch.
+        double ghostMs = 1000.0 * Math.Pow(0.006, t); // 1 => ~1000ms, 20 => ~6ms
+        _ghostTimer.Interval = TimeSpan.FromMilliseconds(Math.Clamp(ghostMs, 6.0, 1000.0));
+    }
+
+    private static double Lerp(double from, double to, double t)
+        => from + ((to - from) * t);
+
+    private static string FormatGhostStatus(MarsRover.Core.Algorithm.EpisodeSnapshot snap)
+        => $"Episode {snap.Episode} | {snap.MineralsCollected} minerals | " +
+           (snap.BatteryDied  ? "💀 Battery died" :
+            snap.ReturnedHome ? "🏠 Returned home" : "⏱ Time up");
+
+    private static string SpeedToUiLabel(MarsRover.Core.Models.RoverSpeed speed)
+        => speed switch
+        {
+            MarsRover.Core.Models.RoverSpeed.Slow   => "Slow",
+            MarsRover.Core.Models.RoverSpeed.Normal => "Medium",
+            MarsRover.Core.Models.RoverSpeed.Fast   => "Fast",
+            _                                       => speed.ToString()
+        };
+
+    private static string FormatTrainingStatus(
+        int episode, int totalEps, double epsilon, int bestMinerals, int bufferSize, int statesKnown)
+        => $"[Q-table] Ep {episode}/{totalEps} | " +
+           $"ε={epsilon:F3} | " +
+           $"Best: {bestMinerals} ⛏ | " +
+           $"Buffer: {bufferSize:N0} | " +
+           $"States: {statesKnown:N0}";
+
+    private void AddFastReplaySample(TrainingChartSample sample)
+    {
+        _fastReplayBatchCount++;
+        _fastReplayMineralsSum += sample.RunMinerals;
+        _fastReplayRewardSum   += sample.LastReward;
+        _fastReplayBatterySum  += sample.LastBattery;
+        _fastReplayLastSample   = sample;
+
+        if (_fastReplayBatchCount >= FastReplayBatchSize)
+            FlushFastReplayBatch();
+    }
+
+    private void FlushFastReplayBatch()
+    {
+        if (_fastReplayBatchCount == 0 || _fastReplayLastSample == null) return;
+
+        var last = _fastReplayLastSample.Value;
+        double c = _fastReplayBatchCount;
+
+        _epMineralPoints.Add(new(last.Episode, _fastReplayMineralsSum / c));
+        _epRewardPoints.Add(new(last.Episode, _fastReplayRewardSum / c));
+        _epBatteryPoints.Add(new(last.Episode, _fastReplayBatterySum / c));
+
+        if (_userWantsToWatch && _trainingReplayMode == TrainingReplayMode.Fast)
+        {
+            TrainingProgress = last.TotalEps > 0
+                ? (double)last.Episode / last.TotalEps * 100.0
+                : 0.0;
+            TrainingStatus = FormatTrainingStatus(
+                last.Episode, last.TotalEps, last.Epsilon,
+                last.BestMinerals, last.BufferSize, last.StatesKnown);
+        }
+
+        ResetFastReplayBatch();
+    }
+
+    private void ResetFastReplayBatch()
+    {
+        _fastReplayBatchCount = 0;
+        _fastReplayMineralsSum = 0;
+        _fastReplayRewardSum = 0;
+        _fastReplayBatterySum = 0;
+        _fastReplayLastSample = null;
     }
 }

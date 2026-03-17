@@ -1,0 +1,479 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MarsRover.UI.Views.MenuWindow"
+        Width="1460"
+        Height="900"
+        MinWidth="1100"
+        MinHeight="700"
+        CanResize="True"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="-1"
+        Background="#050507"
+        Icon="/Assets/logo.ico"
+        Title="RELATIVO - Mars Rover Mission Control">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="BaseBlackBrush" Color="#050507"/>
+        <SolidColorBrush x:Key="BaseCharcoalBrush" Color="#0B0D11"/>
+        <SolidColorBrush x:Key="GlassOverlayBrush" Color="#AA06070A"/>
+        <SolidColorBrush x:Key="PanelBrush" Color="#4F0A0B0F"/>
+        <SolidColorBrush x:Key="PanelSoftBrush" Color="#3D0A0B0F"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#FFEF7E2A"/>
+        <SolidColorBrush x:Key="AccentSoftBrush" Color="#66EF7E2A"/>
+        <SolidColorBrush x:Key="AccentDimBrush" Color="#3DEE7A22"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFF6E8D6"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#E7A88367"/>
+    </Window.Resources>
+
+    <Window.Styles>
+        <Style Selector="Button">
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style Selector="TextBlock">
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="TextAlignment" Value="Left"/>
+        </Style>
+
+        <Style Selector="TextBlock.hudLabel">
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="LetterSpacing" Value="2"/>
+            <Setter Property="FontFamily" Value="Bahnschrift, Segoe UI"/>
+        </Style>
+
+        <Style Selector="TextBlock.hudValue">
+            <Setter Property="Foreground" Value="#FFF2A567"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontFamily" Value="Consolas, Cascadia Mono"/>
+            <Setter Property="LetterSpacing" Value="1.2"/>
+        </Style>
+
+        <Style Selector="Border.hudPanel">
+            <Setter Property="Background" Value="#43090A0E"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentDimBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="14,12"/>
+        </Style>
+
+        <Style Selector="Button.menuButton">
+            <Setter Property="Width" Value="432"/>
+            <Setter Property="Height" Value="52"/>
+            <Setter Property="Margin" Value="0,7,0,0"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontFamily" Value="Bahnschrift, Segoe UI"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Background" Value="#180D08"/>
+            <Setter Property="BorderBrush" Value="#7FEF7E2A"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="1"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style Selector="Button.menuButton:pointerover">
+            <Setter Property="Background" Value="#26120B"/>
+            <Setter Property="BorderBrush" Value="#FFEF8A3E"/>
+            <Setter Property="Foreground" Value="#FFFFBE7D"/>
+        </Style>
+
+        <Style Selector="Button.menuButton:pressed">
+            <Setter Property="Background" Value="#34180F"/>
+            <Setter Property="Foreground" Value="#FFFFCEA0"/>
+        </Style>
+
+    </Window.Styles>
+
+    <Grid>
+        <Grid x:Name="VideoHostLayer"/>
+
+        <Border IsHitTestVisible="False">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Offset="0" Color="#C304060A"/>
+                    <GradientStop Offset="0.35" Color="#B3030408"/>
+                    <GradientStop Offset="1" Color="#E2030305"/>
+                </LinearGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <Canvas IsHitTestVisible="False">
+            <Ellipse Width="1900" Height="860"
+                     Canvas.Left="-220"
+                     Canvas.Top="410">
+                <Ellipse.Fill>
+                    <RadialGradientBrush Center="0.63,0.22" GradientOrigin="0.63,0.22" RadiusX="0.95" RadiusY="0.95">
+                        <GradientStop Offset="0" Color="#B3FF9A42"/>
+                        <GradientStop Offset="0.34" Color="#9DE2772C"/>
+                        <GradientStop Offset="0.66" Color="#7C903919"/>
+                        <GradientStop Offset="1" Color="#1D160C08"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+
+            <Ellipse Width="1780" Height="240"
+                     Canvas.Left="-140"
+                     Canvas.Top="336"
+                     Opacity="0.95">
+                <Ellipse.Fill>
+                    <RadialGradientBrush Center="0.72,0.48" GradientOrigin="0.72,0.48" RadiusX="0.9" RadiusY="0.9">
+                        <GradientStop Offset="0" Color="#CCFFB15D"/>
+                        <GradientStop Offset="0.42" Color="#55FF8A34"/>
+                        <GradientStop Offset="1" Color="#00FF8A34"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+
+            <Ellipse Width="1560" Height="620"
+                     Canvas.Left="-80"
+                     Canvas.Top="500"
+                     Opacity="0.38">
+                <Ellipse.Fill>
+                    <RadialGradientBrush Center="0.65,0.12" GradientOrigin="0.65,0.12" RadiusX="0.9" RadiusY="0.9">
+                        <GradientStop Offset="0" Color="#78FF8C35"/>
+                        <GradientStop Offset="0.58" Color="#2AFF732A"/>
+                        <GradientStop Offset="1" Color="#00000000"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+
+            <Path Data="M 0 560 C 360 430, 620 430, 1020 482"
+                  Stroke="#36FF8431"
+                  StrokeThickness="1.2"/>
+            <Path Data="M 0 540 C 340 420, 610 418, 1000 468"
+                  Stroke="#24FF8431"
+                  StrokeThickness="1"/>
+            <Path Data="M 80 510 C 230 488, 380 460, 560 420"
+                  Stroke="#1EFB7C2D"
+                  StrokeThickness="0.8"/>
+
+            <Path Data="M 190 585 C 300 560, 410 538, 520 512"
+                  Stroke="#20FF8E3A"
+                  StrokeThickness="0.9"/>
+            <Path Data="M 260 602 C 360 582, 470 564, 620 538"
+                  Stroke="#19FF8E3A"
+                  StrokeThickness="0.8"/>
+            <Path Data="M 1040 560 C 1160 540, 1250 530, 1410 518"
+                  Stroke="#16FF8E3A"
+                  StrokeThickness="0.8"/>
+        </Canvas>
+
+        <Border IsHitTestVisible="False" Opacity="0.1">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0.03,0" SpreadMethod="Repeat">
+                    <GradientStop Offset="0" Color="#00FF9A52"/>
+                    <GradientStop Offset="0.02" Color="#18FF9A52"/>
+                    <GradientStop Offset="0.04" Color="#00FF9A52"/>
+                    <GradientStop Offset="1" Color="#00FF9A52"/>
+                </LinearGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <Border IsHitTestVisible="False" Opacity="0.09">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,0.03" SpreadMethod="Repeat">
+                    <GradientStop Offset="0" Color="#00FF9251"/>
+                    <GradientStop Offset="0.02" Color="#19FF9251"/>
+                    <GradientStop Offset="0.04" Color="#00FF9251"/>
+                    <GradientStop Offset="1" Color="#00FF9251"/>
+                </LinearGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <Border IsHitTestVisible="False" Opacity="0.13">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,0.012" SpreadMethod="Repeat">
+                    <GradientStop Offset="0" Color="#00FFFFFF"/>
+                    <GradientStop Offset="0.5" Color="#14FFFFFF"/>
+                    <GradientStop Offset="1" Color="#00FFFFFF"/>
+                </LinearGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <Canvas IsHitTestVisible="False" Opacity="0.08">
+            <Ellipse Width="2" Height="2" Fill="#66FF8A3A" Canvas.Left="120" Canvas.Top="160"/>
+            <Ellipse Width="1.5" Height="1.5" Fill="#44FFC68D" Canvas.Left="260" Canvas.Top="420"/>
+            <Ellipse Width="1.8" Height="1.8" Fill="#59FF8A3A" Canvas.Left="540" Canvas.Top="102"/>
+            <Ellipse Width="1.2" Height="1.2" Fill="#48FFD0A1" Canvas.Left="785" Canvas.Top="250"/>
+            <Ellipse Width="2" Height="2" Fill="#66FF8A3A" Canvas.Left="980" Canvas.Top="170"/>
+            <Ellipse Width="1.4" Height="1.4" Fill="#44FFC68D" Canvas.Left="1170" Canvas.Top="410"/>
+            <Ellipse Width="2" Height="2" Fill="#52FF8A3A" Canvas.Left="1330" Canvas.Top="290"/>
+            <Ellipse Width="1.2" Height="1.2" Fill="#3FFF8A3A" Canvas.Left="1110" Canvas.Top="640"/>
+            <Ellipse Width="1.6" Height="1.6" Fill="#44FFC68D" Canvas.Left="380" Canvas.Top="680"/>
+            <Ellipse Width="1.2" Height="1.2" Fill="#59FF8A3A" Canvas.Left="1420" Canvas.Top="170"/>
+            <Ellipse Width="1.4" Height="1.4" Fill="#40FF8A3A" Canvas.Left="1490" Canvas.Top="350"/>
+            <Ellipse Width="1.2" Height="1.2" Fill="#44FFC68D" Canvas.Left="1280" Canvas.Top="540"/>
+            <Ellipse Width="1.5" Height="1.5" Fill="#40FF8A3A" Canvas.Left="930" Canvas.Top="610"/>
+            <Ellipse Width="1.1" Height="1.1" Fill="#48FFC68D" Canvas.Left="470" Canvas.Top="590"/>
+        </Canvas>
+
+        <Border Margin="34" CornerRadius="16"
+                BorderBrush="#44E97C2C" BorderThickness="1"
+                Background="{StaticResource GlassOverlayBrush}">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Border Grid.Row="0" Height="46" Margin="14,12,14,0"
+                        Background="#3A090A0E"
+                        BorderBrush="#2CE17A2B"
+                        BorderThickness="0,0,0,1"
+                        Padding="16,0"
+                        PointerPressed="TopBar_OnPointerPressed">
+                    <Grid ColumnDefinitions="*,Auto,*">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8"
+                                    VerticalAlignment="Center" HorizontalAlignment="Left">
+                            <Ellipse x:Name="OnlineDot" Width="10" Height="10" Fill="{StaticResource AccentBrush}"/>
+                            <TextBlock x:Name="OnlineLabel" Text="ONLINE"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       FontFamily="Bahnschrift, Segoe UI"
+                                       FontWeight="SemiBold"
+                                       FontSize="17"
+                                       LetterSpacing="3"/>
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1"
+                                   Text="RELATIVO SPACE SYSTEMS"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontFamily="Bahnschrift, Segoe UI"
+                                   FontWeight="SemiBold"
+                                   FontSize="16"
+                                   Foreground="#FFF3A869"
+                                   LetterSpacing="4"/>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="14"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right">
+                            <TextBlock Text="3.0°"
+                                       Classes="hudLabel"
+                                       FontSize="12"/>
+                            <TextBlock Text="v.2"
+                                       Classes="hudLabel"
+                                       FontSize="12"/>
+                            <TextBlock x:Name="SignalText" Text="SIG 95%"
+                                       Classes="hudLabel"
+                                       FontSize="11"
+                                       Opacity="0.85"/>
+                            <Canvas Width="108" Height="16" VerticalAlignment="Center">
+                                <Path Data="M1,8 L10,8 L13,2 L18,13 L23,6 L29,11 L36,5 L42,10 L48,7 L55,9 L61,4 L66,11 L72,6 L80,8 L88,4 L95,6 L106,6"
+                                      Stroke="#FFEE8A3F"
+                                      StrokeThickness="1.2"/>
+                                <Rectangle Width="2" Height="7" Fill="#AAEE8A3F" Canvas.Left="98" Canvas.Top="1"/>
+                                <Rectangle Width="2" Height="9" Fill="#CCEE8A3F" Canvas.Left="102" Canvas.Top="3"/>
+                            </Canvas>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1" Margin="14,18,14,14" ClipToBounds="True">
+                    <Viewbox HorizontalAlignment="Center" VerticalAlignment="Center"
+                             Stretch="Uniform" MaxWidth="700" MaxHeight="560">
+                    <StackPanel Width="620" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Margin="0,8,0,0" Spacing="6">
+                        <Border Width="300" Height="184"
+                                HorizontalAlignment="Center"
+                                Margin="0,2,0,4"
+                                Background="#140D0908"
+                                BorderBrush="#55EF7E2A"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                            <Grid Margin="14" RowDefinitions="*,Auto">
+                                <Border Width="172" Height="90"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        CornerRadius="45"
+                                        BorderBrush="#44EF7E2A"
+                                        BorderThickness="1"
+                                        Background="#120B0907">
+                                    <TextBlock Text="LOGO MAJD"
+                                               FontFamily="Bahnschrift, Segoe UI"
+                                               FontWeight="SemiBold"
+                                               FontSize="25"
+                                               Foreground="#CCEF9A57"
+                                               LetterSpacing="4"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Text="RELATIVO"
+                                   HorizontalAlignment="Center"
+                                   Foreground="#FFFFA460"
+                                   FontFamily="Bahnschrift, Segoe UI"
+                                   FontWeight="Bold"
+                                   FontSize="60"
+                                   LetterSpacing="4.8"/>
+
+                        <TextBlock Text="MARS ROVER"
+                                   HorizontalAlignment="Center"
+                                   Foreground="#FFEAA06A"
+                                   FontFamily="Bahnschrift, Segoe UI"
+                                   FontWeight="SemiBold"
+                                   FontSize="42"
+                                   LetterSpacing="7"
+                                   Margin="0,-8,0,0"/>
+
+                        <TextBlock Text="Autonomous Exploration System"
+                                   HorizontalAlignment="Center"
+                                   Foreground="#FFE0B487"
+                                   FontFamily="Consolas, Cascadia Mono"
+                                   FontSize="15"
+                                   LetterSpacing="1.2"
+                                   Margin="0,3,0,14"/>
+
+                        <Button Content="START MISSION" Classes="menuButton" Click="StartMission_OnClick"/>
+                        <Button Content="SETTINGS" Classes="menuButton" Click="Settings_OnClick"/>
+                        <Button Content="EXIT" Classes="menuButton" Click="Exit_OnClick"/>
+                    </StackPanel>
+                    </Viewbox>
+
+                    <Border x:Name="VideoFallbackPanel"
+                            IsVisible="False"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Bottom"
+                            Margin="0,0,10,16"
+                            Padding="10,7"
+                            Background="#66130B07"
+                            BorderBrush="#55EA7D2D"
+                            BorderThickness="1"
+                            CornerRadius="5">
+                        <TextBlock Text="Video background is in safe mode (set MARS_UI_VIDEO=1 to enable)"
+                                   FontFamily="Consolas, Cascadia Mono"
+                                   FontSize="11"
+                                   Foreground="#FFE9AB78"/>
+                    </Border>
+                </Grid>
+
+                <Grid Grid.Row="2" Margin="14,0,14,14" ColumnDefinitions="1.2*,*">
+                    <Border Grid.Column="0" Classes="hudPanel">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="SIGNAL FROM MARS" Classes="hudLabel" FontSize="13"/>
+                            <Border Background="#240F0907"
+                                    BorderBrush="#33EF7E2A"
+                                    BorderThickness="1"
+                                    CornerRadius="2"
+                                    Padding="6,5">
+                                <StackPanel x:Name="SignalSegmentsPanel"
+                                            Orientation="Horizontal"
+                                            Spacing="2"
+                                            HorizontalAlignment="Left"/>
+                            </Border>
+                            <Border Height="1" Background="#33E97C2C"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="4">
+                                    <TextBlock Text="STATUS: LINK STABLE" Classes="hudValue"/>
+                                    <TextBlock Text="LATENCY: 14m 32s" Classes="hudValue"/>
+                                </StackPanel>
+                                <Canvas Grid.Column="1" Width="60" Height="36" VerticalAlignment="Bottom">
+                                    <Rectangle Width="14" Height="2" Fill="#66EF7E2A" Canvas.Left="2" Canvas.Top="26"/>
+                                    <Rectangle Width="10" Height="2" Fill="#AAEF7E2A" Canvas.Left="18" Canvas.Top="26"/>
+                                    <Rectangle Width="6" Height="2" Fill="#66EF7E2A" Canvas.Left="30" Canvas.Top="26"/>
+                                    <Rectangle Width="2" Height="12" Fill="#55EF7E2A" Canvas.Left="52" Canvas.Top="10"/>
+                                    <Rectangle Width="8" Height="2" Fill="#55EF7E2A" Canvas.Left="44" Canvas.Top="10"/>
+                                </Canvas>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Classes="hudPanel" Margin="16,0,0,0">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="MISSION CONTROL v1.2" Classes="hudValue"/>
+                            <Border Height="1" Background="#33E97C2C"/>
+                            <TextBlock Text="VIDEO FEED: ACTIVE" Classes="hudValue"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="SOURCE: MARS ORBIT SATELLITE" Classes="hudValue"/>
+                                <Canvas Grid.Column="1" Width="80" Height="18" VerticalAlignment="Center" Margin="8,0,0,0">
+                                    <Rectangle Width="16" Height="3" Fill="#55EF7E2A" Canvas.Left="2" Canvas.Top="8"/>
+                                    <Rectangle Width="10" Height="3" Fill="#99EF7E2A" Canvas.Left="22" Canvas.Top="8"/>
+                                    <Rectangle Width="15" Height="3" Fill="#66EF7E2A" Canvas.Left="35" Canvas.Top="8"/>
+                                    <Rectangle Width="9" Height="3" Fill="#44EF7E2A" Canvas.Left="53" Canvas.Top="8"/>
+                                </Canvas>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <Canvas x:Name="FrameCornerGuides" IsHitTestVisible="False" Margin="44">
+            <Border Width="16" Height="1.2" Background="#88EC7D2C"
+                    CornerRadius="1"
+                    Canvas.Left="34" Canvas.Top="626"/>
+            <Border Width="1.2" Height="16" Background="#88EC7D2C"
+                    CornerRadius="1"
+                    Canvas.Left="34" Canvas.Top="610"/>
+
+            <Border Width="16" Height="1.2" Background="#88EC7D2C"
+                    CornerRadius="1"
+                    Canvas.Right="34" Canvas.Top="626"/>
+            <Border Width="1.2" Height="16" Background="#88EC7D2C"
+                    CornerRadius="1"
+                    Canvas.Right="34" Canvas.Top="610"/>
+        </Canvas>
+
+        <Canvas x:Name="DynamicDustLayer" IsHitTestVisible="False" Opacity="0.25"/>
+        <Canvas x:Name="GlitchArtifactsLayer" IsHitTestVisible="False" Opacity="0.2"/>
+
+        <Border x:Name="GlitchLine"
+                IsVisible="False"
+                IsHitTestVisible="False"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Width="220"
+                Height="1.2"
+                Margin="0,220,0,0"
+                Background="#2CFFB36E"/>
+
+        <Border x:Name="SettingsOverlay"
+                IsVisible="False"
+                Background="#B3000000"
+                Padding="24">
+            <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="440"
+                    Background="#E60B0D11"
+                    BorderBrush="#66EF7E2A"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="20">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="MISSION DISPLAY SETTINGS"
+                               FontFamily="Bahnschrift, Segoe UI"
+                               FontWeight="SemiBold"
+                               FontSize="24"
+                               Foreground="#FFF6AF76"
+                               LetterSpacing="2"/>
+                    <TextBlock Text="Visual profile is optimized for dark control-room readability with restrained HUD effects."
+                               Foreground="#FFD2A377"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               FontFamily="Consolas, Cascadia Mono"/>
+
+                    <StackPanel Margin="0,8,0,4" Spacing="6">
+                        <CheckBox x:Name="FullscreenModeCheckBox"
+                                  IsChecked="True"
+                                  Content="Fullscreen mode"
+                                  Foreground="#FFF2BB8D"
+                                  FontSize="14"
+                                  Checked="FullscreenMode_OnChanged"
+                                  Unchecked="FullscreenMode_OnChanged"/>
+                        <CheckBox IsChecked="True" IsEnabled="False" Content="Live Mars video feed"
+                                  Foreground="#FFF2BB8D" FontSize="14"/>
+                        <CheckBox IsChecked="True" IsEnabled="False" Content="Scanline filter"
+                                  Foreground="#FFF2BB8D" FontSize="14"/>
+                        <CheckBox IsChecked="True" IsEnabled="False" Content="Telemetry glow"
+                                  Foreground="#FFF2BB8D" FontSize="14"/>
+                    </StackPanel>
+
+                    <Button Content="CLOSE" Classes="menuButton" Width="180" Height="46"
+                            FontSize="22" HorizontalAlignment="Right"
+                            Click="CloseSettings_OnClick"/>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</Window>

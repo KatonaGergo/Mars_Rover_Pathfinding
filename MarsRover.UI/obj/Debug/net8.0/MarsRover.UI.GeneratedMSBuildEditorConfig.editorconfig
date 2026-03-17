@@ -31,3 +31,6 @@ build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
 [C:/Users/Dári Andrea/Desktop/Mars/Mars_Rover_Pathfinding/MarsRover.UI/Views/MainWindow.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
+
+[C:/Users/Dári Andrea/Desktop/Mars/Mars_Rover_Pathfinding/MarsRover.UI/Views/MenuWindow.axaml]
+build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml

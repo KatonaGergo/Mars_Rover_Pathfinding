@@ -3,3 +3,5 @@ bin/
 obj/
 results/
 Saved_Models/
+_temp_build/
+.vscode/

@@ -1,81 +1,89 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- ═══════════════════════════════════════════════
-         MARS ROVER — Dark Space Theme
-         Palette: deep space blacks, mars-rust orange,
-                  mineral accent blues/yellows/greens
-         ═══════════════════════════════════════════════ -->
-
     <Style Selector="Window">
-        <Setter Property="Background" Value="#0D0F14" />
-        <Setter Property="Foreground" Value="#E8DCC8" />
-        <Setter Property="FontFamily"
-                Value="Consolas,Courier New,monospace" />
+        <Setter Property="Background" Value="#050507" />
+        <Setter Property="Foreground" Value="#F6E8D6" />
+        <Setter Property="FontFamily" Value="Bahnschrift,Segoe UI" />
     </Style>
 
-    <!-- Panel backgrounds -->
     <Style Selector="Border.panel">
-        <Setter Property="Background"       Value="#141820" />
-        <Setter Property="BorderBrush"      Value="#2A3040" />
-        <Setter Property="BorderThickness"  Value="1" />
-        <Setter Property="CornerRadius"     Value="6" />
-        <Setter Property="Padding"          Value="12" />
+        <Setter Property="Background" Value="#4F0A0B0F" />
+        <Setter Property="BorderBrush" Value="#3DEE7A22" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="12" />
     </Style>
 
     <Style Selector="Border.panel-accent">
-        <Setter Property="Background"       Value="#161D28" />
-        <Setter Property="BorderBrush"      Value="#D4521A" />
-        <Setter Property="BorderThickness"  Value="1,0,0,0" />
-        <Setter Property="Padding"          Value="12" />
+        <Setter Property="Background" Value="#3D0A0B0F" />
+        <Setter Property="BorderBrush" Value="#66EF7E2A" />
+        <Setter Property="BorderThickness" Value="1,0,0,0" />
+        <Setter Property="Padding" Value="12" />
     </Style>
 
-    <!-- Header labels -->
     <Style Selector="TextBlock.header">
-        <Setter Property="FontSize"     Value="11" />
-        <Setter Property="FontWeight"   Value="Bold" />
-        <Setter Property="Foreground"   Value="#D4521A" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="#FFEF7E2A" />
         <Setter Property="LetterSpacing" Value="2" />
     </Style>
 
     <Style Selector="TextBlock.value">
-        <Setter Property="FontSize"   Value="20" />
+        <Setter Property="FontSize" Value="20" />
         <Setter Property="FontWeight" Value="Bold" />
-        <Setter Property="Foreground" Value="#E8DCC8" />
+        <Setter Property="Foreground" Value="#FFF6E8D6" />
     </Style>
 
     <Style Selector="TextBlock.label">
-        <Setter Property="FontSize"   Value="11" />
-        <Setter Property="Foreground" Value="#687080" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="#D09A70" />
+        <Setter Property="LetterSpacing" Value="1" />
     </Style>
 
-    <!-- Buttons -->
     <Style Selector="Button.primary">
-        <Setter Property="Background"  Value="#D4521A" />
-        <Setter Property="Foreground"  Value="#FFFFFF" />
-        <Setter Property="FontWeight"  Value="Bold" />
-        <Setter Property="FontSize"    Value="12" />
-        <Setter Property="Padding"     Value="16,8" />
+        <Setter Property="Background" Value="#1B0F0A" />
+        <Setter Property="Foreground" Value="#FFEF7E2A" />
+        <Setter Property="BorderBrush" Value="#66EF7E2A" />
+        <Setter Property="BorderThickness" Value="1.2" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Padding" Value="16,8" />
         <Setter Property="CornerRadius" Value="4" />
+    </Style>
+
+    <Style Selector="Button.primary:pointerover">
+        <Setter Property="Background" Value="#31170E" />
+        <Setter Property="Foreground" Value="#FFFFB26D" />
+        <Setter Property="BorderBrush" Value="#FFEF7E2A" />
     </Style>
 
     <Style Selector="Button.secondary">
-        <Setter Property="Background"   Value="#1E2530" />
-        <Setter Property="Foreground"   Value="#9BA8B8" />
-        <Setter Property="BorderBrush"  Value="#2A3040" />
+        <Setter Property="Background" Value="#160D09" />
+        <Setter Property="Foreground" Value="#E6B386" />
+        <Setter Property="BorderBrush" Value="#3DEE7A22" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="FontSize"     Value="12" />
-        <Setter Property="Padding"      Value="12,6" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Padding" Value="12,6" />
         <Setter Property="CornerRadius" Value="4" />
     </Style>
 
-    <!-- Mineral colour helpers (used in code, referenced here for documentation)
-         Blue  mineral: #2B7FFF
-         Yellow mineral: #FFD700
-         Green  mineral: #3DBA5C
-         Obstacle:       #4A4A55
-         Surface:        #1E1012   (dark maroon-grey)
-         Rover:          #FF6B35  (bright orange)
-    -->
+    <Style Selector="Button.secondary:pointerover">
+        <Setter Property="Background" Value="#24120B" />
+        <Setter Property="Foreground" Value="#FFF1C49A" />
+        <Setter Property="BorderBrush" Value="#66EF7E2A" />
+    </Style>
+
+    <Style Selector="NumericUpDown">
+        <Setter Property="Background" Value="#120D0B" />
+        <Setter Property="Foreground" Value="#F6E8D6" />
+        <Setter Property="BorderBrush" Value="#3DEE7A22" />
+    </Style>
+
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="#120D0B" />
+        <Setter Property="Foreground" Value="#F6E8D6" />
+        <Setter Property="BorderBrush" Value="#3DEE7A22" />
+    </Style>
 
 </Styles>
