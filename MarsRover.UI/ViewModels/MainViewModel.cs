@@ -29,7 +29,7 @@ public partial class MainViewModel : ObservableObject
     private const int MaxDurationHours = 720;
 
     // ── Simulation state ─────────────────────────────────────────────────────
-    [ObservableProperty] private int    _durationHours   = 48;
+    [ObservableProperty] private double _durationHours   = 48;
     [ObservableProperty] private int    _trainingEpisodes = 1000;
     [ObservableProperty] private double _playbackSpeed   = 1.0;
 
@@ -61,6 +61,7 @@ public partial class MainViewModel : ObservableObject
     // ── Map + model path ─────────────────────────────────────────────────────
     [ObservableProperty] private GameMap? _gameMap;
     public bool HasMapLoaded => GameMap != null;
+    public bool HasReplayData => HasLog || (GhostTrail?.Count > 0);
     private string _modelPath = "q_table"; // base path — runner appends .weights.json / .meta.json
     private string _mapPath   = "";           // stored on map load — used for run log
     [ObservableProperty] private bool _hasSavedModel = false;
@@ -99,11 +100,21 @@ public partial class MainViewModel : ObservableObject
     partial void OnShowTrainingChartChanged(bool value) => OnPropertyChanged(nameof(ShowMapView));
     partial void OnShowGhostReplayChanged(bool value)   => OnPropertyChanged(nameof(ShowMapView));
     partial void OnGameMapChanged(GameMap? value)       => OnPropertyChanged(nameof(HasMapLoaded));
-    partial void OnDurationHoursChanged(int value)
+    partial void OnHasLogChanged(bool value)            => OnPropertyChanged(nameof(HasReplayData));
+    partial void OnGhostTrailChanged(List<MarsRover.Core.Algorithm.StepRecord>? value)
+        => OnPropertyChanged(nameof(HasReplayData));
+    partial void OnDurationHoursChanged(double value)
     {
-        int clamped = Math.Clamp(value, MinDurationHours, MaxDurationHours);
-        if (clamped != value)
-            DurationHours = clamped;
+        if (double.IsNaN(value) || double.IsInfinity(value))
+        {
+            DurationHours = MinDurationHours;
+            return;
+        }
+
+        double clamped = Math.Clamp(value, MinDurationHours, MaxDurationHours);
+        double rounded = Math.Round(clamped, MidpointRounding.AwayFromZero);
+        if (Math.Abs(rounded - value) > double.Epsilon)
+            DurationHours = rounded;
     }
 
     // ── Simulation chart series (playback) ────────────────────────────────────
@@ -141,6 +152,8 @@ public partial class MainViewModel : ObservableObject
     private TrainingChartSample? _fastReplayLastSample;
     private MarsRover.Core.Algorithm.EpisodeSnapshot? _fastPendingSnapshot;
     private bool _isNavigatingAway;
+    private int _runGeneration;
+    private int _replayGeneration;
 
     private readonly record struct TrainingChartSample(
         int Episode,
@@ -331,6 +344,7 @@ public partial class MainViewModel : ObservableObject
         if (GameMap == null) return;
 
         _isNavigatingAway = false;
+        int runGeneration = ++_runGeneration;
         int durationHours = EnsureValidDurationHours();
 
         IsTraining       = true;
@@ -368,7 +382,7 @@ public partial class MainViewModel : ObservableObject
                     {
                         Dispatcher.UIThread.Post(() =>
                         {
-                            if (_isNavigatingAway) return;
+                            if (_isNavigatingAway || runGeneration != _runGeneration) return;
 
                             if (!_userWantsToWatch)
                             {
@@ -391,7 +405,7 @@ public partial class MainViewModel : ObservableObject
 
                 Dispatcher.UIThread.Post(() =>
                 {
-                    if (_isNavigatingAway) return;
+                    if (_isNavigatingAway || runGeneration != _runGeneration) return;
 
                     if (_trainingReplayMode == TrainingReplayMode.Fast)
                         FlushFastReplayBatch();
@@ -446,7 +460,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            if (_isNavigatingAway) return;
+            if (_isNavigatingAway || runGeneration != _runGeneration) return;
             IsTraining     = false;
             TrainingStatus = $"ERROR: {ex.GetType().Name}: {ex.Message}";
             if (ex.InnerException != null)
@@ -490,24 +504,58 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void Play()
     {
+        UpdateTimerInterval();
+
+        if (ShowGhostReplay && GhostTrail != null && GhostTrail.Count > 0)
+        {
+            if (GhostIndex >= GhostTrail.Count)
+                GhostIndex = 0;
+
+            _ghostTimer.Start();
+            IsGhostMode = true;
+            IsRunning = true;
+            IsPaused = false;
+            return;
+        }
+
         if (!HasLog) return;
+
+        _playbackTimer.Start();
         IsRunning = true;
         IsPaused  = false;
-        UpdateTimerInterval();
-        _playbackTimer.Start();
     }
 
     [RelayCommand]
     private void Pause()
     {
+        bool wasRunning = _playbackTimer.IsEnabled || _ghostTimer.IsEnabled;
         _playbackTimer.Stop();
-        IsPaused  = true;
-        IsRunning = false;
+        _ghostTimer.Stop();
+        if (wasRunning)
+        {
+            IsPaused = true;
+            IsRunning = false;
+            return;
+        }
+
+        Play();
     }
 
     [RelayCommand]
     private void StepForward()
     {
+        if (ShowGhostReplay && GhostTrail != null)
+        {
+            if (GhostIndex < GhostTrail.Count)
+            {
+                _ghostTimer.Stop();
+                OnGhostTick(this, EventArgs.Empty);
+                IsPaused = true;
+                IsRunning = false;
+            }
+            return;
+        }
+
         if (_playbackIndex < _log.Count)
             ApplyLogEntry(_log[_playbackIndex++]);
     }
@@ -533,7 +581,16 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var loadedMap = MarsRover.Core.Simulation.GameMap.LoadFromFile(path);
+            _isNavigatingAway = true;
+            _runGeneration++;
+            _userWantsToWatch = false;
+            ShowWatchPrompt = false;
+            _pendingCompletionStatus = null;
+            _pendingResetDisplayToStart = false;
             StopReplayProcesses(clearLog: true, clearTrainingQueues: true);
+            IsTraining = false;
+            TrainingProgress = 0;
+
             GameMap  = loadedMap;
             _mapPath = path;
             RoverX  = GameMap.StartX;
@@ -541,10 +598,12 @@ public partial class MainViewModel : ObservableObject
             TrainingStatus = $"Map loaded — {System.IO.Path.GetFileName(path)} " +
                              $"| {GameMap.RemainingMinerals.Count} minerals";
             ResetDisplayToStart();
+            _isNavigatingAway = false;
         }
         catch (Exception ex)
         {
             TrainingStatus = $"Failed to load map: {ex.Message}";
+            _isNavigatingAway = false;
         }
     }
 
@@ -554,6 +613,7 @@ public partial class MainViewModel : ObservableObject
     private async Task BackToMenu()
     {
         _isNavigatingAway = true;
+        _runGeneration++;
         _userWantsToWatch = false;
         ShowWatchPrompt = false;
         _pendingCompletionStatus = null;
@@ -642,6 +702,8 @@ public partial class MainViewModel : ObservableObject
 
     private void HandleTrainingRunCompleted(TrainingProgress progress)
     {
+        if (_isNavigatingAway) return;
+
         var sample = new TrainingChartSample(
             Episode:      progress.Episode,
             RunMinerals:  progress.LastMinerals,
@@ -716,6 +778,7 @@ public partial class MainViewModel : ObservableObject
 
     private void StartGhostReplay(MarsRover.Core.Algorithm.EpisodeSnapshot snap)
     {
+        if (_isNavigatingAway) return;
         _pendingGhostSnapshots.Enqueue(snap);
         if (_ghostTimer.IsEnabled) return;
         StartNextGhostReplayFromQueue();
@@ -723,6 +786,8 @@ public partial class MainViewModel : ObservableObject
 
     private void StartFastGhostReplay(MarsRover.Core.Algorithm.EpisodeSnapshot snap)
     {
+        if (_isNavigatingAway) return;
+
         if (_ghostTimer.IsEnabled && GhostTrail != null && GhostIndex < GhostTrail.Count)
         {
             _fastPendingSnapshot = snap;
@@ -734,6 +799,7 @@ public partial class MainViewModel : ObservableObject
 
     private void StartNextGhostReplayFromQueue()
     {
+        if (_isNavigatingAway) return;
         if (_ghostTimer.IsEnabled) return;
         if (_pendingGhostSnapshots.Count == 0) return;
 
@@ -743,6 +809,7 @@ public partial class MainViewModel : ObservableObject
 
     private void LoadSnapshot(MarsRover.Core.Algorithm.EpisodeSnapshot snap)
     {
+        if (_isNavigatingAway) return;
         _ghostTimer.Stop();
         GhostTrail  = snap.Steps;
         GhostIndex  = 0;
@@ -760,6 +827,12 @@ public partial class MainViewModel : ObservableObject
 
     private void OnGhostTick(object? sender, EventArgs e)
     {
+        if (_isNavigatingAway)
+        {
+            _ghostTimer.Stop();
+            return;
+        }
+
         var trail = GhostTrail;
         if (trail == null || GhostIndex >= trail.Count)
         {
@@ -778,12 +851,20 @@ public partial class MainViewModel : ObservableObject
             if (_pendingGhostSnapshots.Count > 0)
             {
                 int gapMs = (int)Math.Clamp(_ghostTimer.Interval.TotalMilliseconds * 0.6, 60, 320);
-                Task.Delay(gapMs).ContinueWith(_ => Dispatcher.UIThread.Post(StartNextGhostReplayFromQueue));
+                int replayGeneration = _replayGeneration;
+                Task.Delay(gapMs).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
+                {
+                    if (_isNavigatingAway || replayGeneration != _replayGeneration) return;
+                    StartNextGhostReplayFromQueue();
+                }));
                 return;
             }
 
+            int completionGeneration = _replayGeneration;
             Task.Delay(600).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
             {
+                if (_isNavigatingAway || completionGeneration != _replayGeneration) return;
+
                 if (_pendingTrainingChartSamples.Count > 0)
                     FlushPendingTrainingChartSamples();
 
@@ -842,14 +923,23 @@ public partial class MainViewModel : ObservableObject
 
     private int EnsureValidDurationHours()
     {
-        int clamped = Math.Clamp(DurationHours, MinDurationHours, MaxDurationHours);
-        if (clamped != DurationHours)
+        if (double.IsNaN(DurationHours) || double.IsInfinity(DurationHours))
+            DurationHours = MinDurationHours;
+
+        int clamped = (int)Math.Clamp(
+            Math.Round(DurationHours, MidpointRounding.AwayFromZero),
+            MinDurationHours,
+            MaxDurationHours);
+
+        if (Math.Abs(DurationHours - clamped) > double.Epsilon)
             DurationHours = clamped;
+
         return clamped;
     }
 
     private void StopReplayProcesses(bool clearLog, bool clearTrainingQueues)
     {
+        _replayGeneration++;
         _playbackTimer.Stop();
         _ghostTimer.Stop();
         _playbackIndex = 0;
@@ -863,6 +953,10 @@ public partial class MainViewModel : ObservableObject
             _pendingGhostSnapshots.Clear();
             _pendingTrainingChartSamples.Clear();
             _fastPendingSnapshot = null;
+            GhostTrail = null;
+            GhostIndex = 0;
+            GhostStatus = string.Empty;
+            GhostEventLog.Clear();
             ResetFastReplayBatch();
         }
 
