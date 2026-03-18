@@ -111,8 +111,13 @@
         <!-- ═══════════════════════════════════════════════
              LEFT — Map OR Training Chart + Status bar
              ═══════════════════════════════════════════════ -->
-        <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="*,Auto" Margin="0,0,8,0">
+            
+
+             
+
+        <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="*,Auto" Margin="0,0,8,0" >
             <!-- MAP VIEW -->
+          
             <Border Classes="panel" Grid.Row="0" Padding="4"
                     IsVisible="{Binding ShowMapView}">
                 <Grid RowDefinitions="Auto,*">
@@ -145,12 +150,18 @@
                             </StackPanel>
                         </Border>
                         <!-- Map canvas -->
+                    <Grid Grid.Row="1" IsVisible="{Binding HasMapLoaded}">
+                        <Image Source="avares://MarsRover.UI/Assets/MarsSurface.png"
+                          Stretch="UniformToFill"
+                          Opacity="0.2"/>
+
                         <controls:MapCanvas
                             IsVisible="{Binding HasMapLoaded}"
                             GameMap="{Binding GameMap}"
                             RoverX="{Binding RoverX}"
                             RoverY="{Binding RoverY}"
                             IsNight="{Binding IsNight}"/>
+                        </Grid>
                     </Panel>
                 </Grid>
             </Border>
