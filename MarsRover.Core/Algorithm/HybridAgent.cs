@@ -28,6 +28,9 @@ public class HybridAgent
     private const double BatterySafetyMargin = 3.0;
     private const int    LookaheadTopK       = 6;
     private const double LookaheadWeight     = 0.35;
+    private const int    LocalDensityRadius  = 2;
+    private const double ObstaclePenaltyConservative = 4.0;
+    private const double ObstaclePenaltyAggressive   = 2.5;
 
     // ── Fields ────────────────────────────────────────────────────────────────
     private readonly QTable  _qTable;
@@ -194,6 +197,9 @@ public class HybridAgent
         double requiredMargin  = RequiredBatteryMargin(risk);
         double detourPenalty   = risk == RiskMode.Aggressive ? 0.9 : 1.35;
         double marginWeight    = risk == RiskMode.Aggressive ? 5.5 : 4.0;
+        double obstaclePenalty = risk == RiskMode.Aggressive
+            ? ObstaclePenaltyAggressive
+            : ObstaclePenaltyConservative;
 
         foreach (var pos in liveMap.RemainingMinerals)
         {
@@ -222,11 +228,14 @@ public class HybridAgent
                 continue;
             double marginBattery = legHome.MinBattery - requiredMargin;
             if (marginBattery < 0) continue;
+            double localObstacleDensity = LocalObstacleDensity(
+                pos.x, pos.y, liveMap, LocalDensityRadius);
 
             // Margin-aware detour score: accept a longer detour if time/battery margins are healthy.
             double score = 100.0 / (stepsToMineral + 1.0)
                          + marginTicks * marginWeight
                          + marginBattery * 0.8
+                         - localObstacleDensity * obstaclePenalty
                          - detourCost * detourPenalty
                          - stepsHome * 0.05;
             if (score > bestScore)
@@ -507,6 +516,9 @@ public class HybridAgent
         double requiredMargin = RequiredBatteryMargin(mode);
         double detourPenalty = mode == RiskMode.Aggressive ? 0.04 : 0.065;
         double marginBonus = mode == RiskMode.Aggressive ? 3.2 : 2.3;
+        double obstaclePenalty = mode == RiskMode.Aggressive
+            ? ObstaclePenaltyAggressive
+            : ObstaclePenaltyConservative;
 
         foreach (var pos in liveMap.RemainingMinerals)
         {
@@ -534,9 +546,12 @@ public class HybridAgent
                 continue;
 
             double marginBattery = legHome.MinBattery - requiredMargin;
+            double localObstacleDensity = LocalObstacleDensity(
+                pos.x, pos.y, liveMap, LocalDensityRadius);
             double baseScore = 100.0 / (stepsToMineral + 1.0)
                              + marginTicks * marginBonus
                              + marginBattery * 0.75
+                             - localObstacleDensity * obstaclePenalty
                              - stepsHome * detourPenalty;
             candidates.Add(new MineralCandidatePlan(
                 X:               pos.x,
@@ -632,7 +647,8 @@ public class HybridAgent
         {
             int stepsHome = DistanceToBaseSteps(state, liveMap);
             if (stepsHome == int.MaxValue) return RoverSpeed.Slow;
-            return BestAffordableSpeedForLeg(state.Tick, stepsHome, state.Battery);
+            return TryPickAggressiveReturnSpeed(state.Tick, stepsHome, state.Battery)
+                   ?? RoverSpeed.Slow;
         }
 
         // NIGHT SPEED CAP: cap by path length, not by affordability.
@@ -767,31 +783,14 @@ public class HybridAgent
 
         while (stepsRemaining > 0)
         {
-            RoverSpeed max = MaxSpeedByDistance(stepsRemaining);
-            RoverSpeed[] candidates = max switch
-            {
-                RoverSpeed.Fast   => [RoverSpeed.Fast, RoverSpeed.Normal, RoverSpeed.Slow],
-                RoverSpeed.Normal => [RoverSpeed.Normal, RoverSpeed.Slow],
-                _                 => [RoverSpeed.Slow]
-            };
-
-            RoverSpeed? chosen = null;
-            double chosenBattery = battery;
-
-            foreach (var speed in candidates)
-            {
-                bool isDay = SimulationEngine.IsDay(tick);
-                double nextBattery = EnergyCalculator.Apply(
-                    battery, RoverActionType.Move, speed, isDay);
-                if (nextBattery < BatterySafetyMargin) continue;
-                chosen = speed;
-                chosenBattery = nextBattery;
-                break;
-            }
+            RoverSpeed? chosen = TryPickAggressiveReturnSpeed(tick, stepsRemaining, battery);
 
             if (chosen == null)
                 return new DynamicLegPlan(false, ticksUsed, battery, minBattery);
 
+            bool isDay = SimulationEngine.IsDay(tick);
+            double chosenBattery = EnergyCalculator.Apply(
+                battery, RoverActionType.Move, chosen.Value, isDay);
             stepsRemaining -= (int)chosen.Value;
             battery = chosenBattery;
             minBattery = Math.Min(minBattery, battery);
@@ -804,6 +803,29 @@ public class HybridAgent
 
     private static RoverSpeed NightSpeedPolicy(int stepsRemaining)
         => stepsRemaining == 2 ? RoverSpeed.Normal : RoverSpeed.Slow;
+
+    private RoverSpeed? TryPickAggressiveReturnSpeed(
+        int tick, int stepsRemaining, double battery)
+    {
+        RoverSpeed max = MaxSpeedByDistance(stepsRemaining);
+        RoverSpeed[] candidates = max switch
+        {
+            RoverSpeed.Fast   => [RoverSpeed.Fast, RoverSpeed.Normal, RoverSpeed.Slow],
+            RoverSpeed.Normal => [RoverSpeed.Normal, RoverSpeed.Slow],
+            _                 => [RoverSpeed.Slow]
+        };
+
+        foreach (var speed in candidates)
+        {
+            bool isDay = SimulationEngine.IsDay(tick);
+            double nextBattery = EnergyCalculator.Apply(
+                battery, RoverActionType.Move, speed, isDay);
+            if (nextBattery < BatterySafetyMargin) continue;
+            return speed;
+        }
+
+        return null;
+    }
 
     private static RoverSpeed MaxSpeedByDistance(int stepsRemaining)
         => stepsRemaining switch
@@ -901,6 +923,26 @@ public class HybridAgent
 
     private static int FieldDistance(int[,] field, int x, int y)
         => field[x, y];
+
+    private static double LocalObstacleDensity(
+        int centerX, int centerY, GameMap liveMap, int radius)
+    {
+        int blocked = 0;
+        int total = 0;
+
+        for (int y = centerY - radius; y <= centerY + radius; y++)
+        {
+            for (int x = centerX - radius; x <= centerX + radius; x++)
+            {
+                if (x == centerX && y == centerY) continue;
+                if (!liveMap.InBounds(x, y)) continue;
+                total++;
+                if (!liveMap.IsPassable(x, y)) blocked++;
+            }
+        }
+
+        return total == 0 ? 0.0 : blocked / (double)total;
+    }
 
     // ── State builder — 10,800 states ────────────────────────────────────────
     // State space: 5×3×5×4×3×4×3 = 10,800

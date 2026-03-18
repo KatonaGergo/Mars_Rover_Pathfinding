@@ -86,7 +86,7 @@ public record TrainingOptionOverrides(
 
 public static class TrainingProfileFactory
 {
-    public static readonly TrainingProfile DefaultProfile = TrainingProfile.Balanced;
+    public static readonly TrainingProfile DefaultProfile = TrainingProfile.Baseline;
 
     public static TrainingOptions CreateOptions(TrainingProfile profile)
         => profile switch

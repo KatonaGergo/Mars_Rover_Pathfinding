@@ -146,6 +146,25 @@ public class SimulationRunner
                 persistModel: false).bestTable;
         }
 
+        // Explicit held-out validation pass before fine-tuning on official map.
+        // Uses official map + fixed generated seeds disjoint from pretraining seeds.
+        if (warmStart != null)
+        {
+            var heldOutSeeds = BuildCurriculumHeldOutSeeds(curriculum);
+            var validation = EvaluatePolicy(
+                warmStart,
+                new SeedSweepOptions(
+                    Enabled: false,
+                    SeedCount: 1,
+                    EvalEpisodesPerSeed: 1,
+                    IncludeOfficialMapInValidation: true,
+                    ValidationMapSeeds: heldOutSeeds));
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[CurriculumValidation] mean={validation.meanMinerals:F2} " +
+                $"std={validation.stdMinerals:F2} returnRate={validation.returnRate:P1}");
+        }
+
         // Fine-tune on official map
         var finetuneOptions = options with
         {
@@ -171,6 +190,12 @@ public class SimulationRunner
         QTable? best = null;
         double bestScore = double.MinValue;
         TrainingResult? bestResult = null;
+        bool hasStrictCandidate = false;
+
+        QTable? fallbackBest = null;
+        double fallbackScore = double.MinValue;
+        double fallbackReturnRate = double.MinValue;
+        TrainingResult? fallbackResult = null;
 
         for (int seed = 0; seed < seedCount; seed++)
         {
@@ -184,22 +209,49 @@ public class SimulationRunner
             var run = TrainCore(episodes, null, seedOptions, persistModel: false);
             var eval = EvaluatePolicy(run.bestTable, seedSweep);
             double score = eval.meanMinerals - 0.5 * eval.stdMinerals;
-            if (eval.returnRate < 1.0) score -= 1_000.0;
+            bool meetsReturnConstraint = eval.returnRate >= 1.0;
 
             System.Diagnostics.Debug.WriteLine(
                 $"[SeedSweep] seed={seed} mean={eval.meanMinerals:F2} std={eval.stdMinerals:F2} " +
-                $"returnRate={eval.returnRate:P1} score={score:F2}");
+                $"returnRate={eval.returnRate:P1} score={score:F2} " +
+                $"strict={(meetsReturnConstraint ? "yes" : "no")}");
 
-            if (score > bestScore)
+            if (meetsReturnConstraint)
             {
-                bestScore = score;
-                best = run.bestTable;
-                bestResult = run.result;
+                if (!hasStrictCandidate || score > bestScore)
+                {
+                    hasStrictCandidate = true;
+                    bestScore = score;
+                    best = run.bestTable;
+                    bestResult = run.result;
+                }
+            }
+            else if (eval.returnRate > fallbackReturnRate
+                     || (Math.Abs(eval.returnRate - fallbackReturnRate) < 1e-9
+                         && score > fallbackScore))
+            {
+                fallbackReturnRate = eval.returnRate;
+                fallbackScore = score;
+                fallbackBest = run.bestTable;
+                fallbackResult = run.result;
             }
         }
 
         if (best == null || bestResult == null)
-            return TrainCore(episodes, onProgress, options);
+        {
+            if (fallbackBest != null && fallbackResult != null)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[SeedSweep] No seed met the strict 100% return-home constraint. " +
+                    "Falling back to best available candidate.");
+                best = fallbackBest;
+                bestResult = fallbackResult;
+            }
+            else
+            {
+                return TrainCore(episodes, onProgress, options);
+            }
+        }
 
         SaveModel(best, episodes, bestResult.BestMinerals, options.ProfileName);
         return (bestResult, best);
@@ -255,6 +307,12 @@ public class SimulationRunner
         var seeds = seedSweep.ValidationMapSeeds ?? [20_001, 20_101, 20_201];
         foreach (int seed in seeds.Distinct())
             yield return BuildGeneratedMap(seed);
+    }
+
+    private static int[] BuildCurriculumHeldOutSeeds(CurriculumOptions curriculum)
+    {
+        int start = curriculum.RandomMapSeedStart + Math.Max(1, curriculum.RandomMapCount) * 100;
+        return [start, start + 100, start + 200];
     }
 
     private static GameMap BuildGeneratedMap(int seed)

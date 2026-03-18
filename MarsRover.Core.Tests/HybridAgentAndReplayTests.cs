@@ -28,6 +28,70 @@ public class HybridAgentAndReplayTests
     }
 
     [Theory]
+    [InlineData(10, 18, 10, 70.0)] // day-start return leg
+    [InlineData(40, 18, 10, 70.0)] // night-start return leg
+    public void ReturnLegParity_RuntimeMatchesAggressiveSimulator(
+        int startTick, int startX, int startY, double startBattery)
+    {
+        var map = CreateMap(startX: 10, startY: 10);
+        var agent = new HybridAgent(map, totalTicks: 200, existingTable: null, seed: 1);
+        ForceReturningPhase(agent);
+
+        int stepsHome = Math.Abs(startX - map.StartX) + Math.Abs(startY - map.StartY);
+        var simMethod = typeof(HybridAgent).GetMethod(
+            "SimulateReturnLegAggressive",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(simMethod);
+        object? simPlan = simMethod!.Invoke(agent, [startTick, stepsHome, startBattery]);
+        Assert.NotNull(simPlan);
+
+        bool expectedFeasible = (bool)simPlan!.GetType().GetProperty("IsFeasible")!.GetValue(simPlan)!;
+        int expectedTicks = (int)simPlan.GetType().GetProperty("Ticks")!.GetValue(simPlan)!;
+        double expectedFinalBattery = (double)simPlan.GetType().GetProperty("FinalBattery")!.GetValue(simPlan)!;
+
+        int x = startX;
+        int y = startY;
+        int tick = startTick;
+        int ticksUsed = 0;
+        double battery = startBattery;
+        bool feasible = true;
+
+        while (x != map.StartX || y != map.StartY)
+        {
+            var state = BuildState(x, y, battery, tick);
+            var speed = agent.ChooseSpeed(state, map);
+            bool isDay = SimulationEngine.IsDay(tick);
+            double nextBattery = EnergyCalculator.Apply(
+                battery, RoverActionType.Move, speed, isDay);
+            if (nextBattery < 3.0)
+            {
+                feasible = false;
+                break;
+            }
+
+            int moveBudget = (int)speed;
+            while (moveBudget-- > 0 && (x != map.StartX || y != map.StartY))
+            {
+                if (x > map.StartX) x--;
+                else if (x < map.StartX) x++;
+                else if (y > map.StartY) y--;
+                else if (y < map.StartY) y++;
+            }
+
+            battery = nextBattery;
+            tick++;
+            ticksUsed++;
+        }
+
+        Assert.Equal(expectedFeasible, feasible);
+        if (!expectedFeasible) return;
+
+        Assert.Equal(expectedTicks, ticksUsed);
+        Assert.Equal(expectedFinalBattery, battery, precision: 8);
+    }
+
+    [Theory]
     [InlineData(95, 0)] // <=0
     [InlineData(94, 1)] // 1-2
     [InlineData(91, 2)] // 3-5
@@ -102,6 +166,15 @@ public class HybridAgentAndReplayTests
             MineralsG: 0,
             IsMining: false,
             LastAction: RoverAction.StandbyAction);
+
+    private static void ForceReturningPhase(HybridAgent agent)
+    {
+        var field = typeof(HybridAgent).GetField(
+            "_phase",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        field!.SetValue(agent, MissionPhase.Returning);
+    }
 
     private static GameMap CreateMap(
         int startX,
