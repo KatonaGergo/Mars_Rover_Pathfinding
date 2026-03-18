@@ -10,4 +10,6 @@ public record ModelInfo(
     int    BestMinerals,
     double Epsilon,
     string SavedAt,
-    int    StatesKnown);
+    int    StatesKnown,
+    int    PolicySchemaVersion = 0,
+    string TrainingProfile = "legacy");

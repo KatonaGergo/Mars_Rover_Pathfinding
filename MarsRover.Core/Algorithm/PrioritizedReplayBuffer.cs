@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace MarsRover.Core.Algorithm;
 
 /// <summary>
@@ -162,6 +164,146 @@ public class PrioritizedReplayBuffer
             isWeights[i] /= maxIsW; // normalize to [0,1]
 
         return (batch, indices, isWeights);
+    }
+
+    /// <summary>
+    /// Diversity-constrained PER: reserve a fraction of the batch for
+    /// stratified groups keyed by (SolPhase, BatteryBucket, ReturnMarginBucket),
+    /// then fill the rest with standard global PER.
+    /// </summary>
+    public (PrioritizedTransition[] batch, int[] indices, double[] isWeights)
+        SampleWithDiversity(int batchSize, double beta = 0.4, double stratifiedFraction = 0.4)
+    {
+        int n = Math.Min(batchSize, _count);
+        if (n <= 0) return (Array.Empty<PrioritizedTransition>(), Array.Empty<int>(), Array.Empty<double>());
+
+        var weights = new double[_count];
+        double totalWeight = 0;
+        for (int i = 0; i < _count; i++)
+        {
+            double w = Math.Pow(_buffer[i].Priority + PriorityEpsilon, PriorityExponent);
+            weights[i] = w;
+            totalWeight += w;
+        }
+
+        if (totalWeight <= 0)
+            return Sample(batchSize, beta);
+
+        int stratifiedTarget = (int)Math.Round(n * Math.Clamp(stratifiedFraction, 0.0, 1.0));
+        var selected = new HashSet<int>();
+
+        // Build strata from state-key features: battery(0), solPhase(1), returnMargin(5)
+        var strata = new Dictionary<string, List<int>>();
+        for (int i = 0; i < _count; i++)
+        {
+            if (weights[i] <= 0) continue;
+            string key = BuildReplayGroupKey(_buffer[i].StateKey);
+            if (!strata.TryGetValue(key, out var list))
+            {
+                list = new List<int>();
+                strata[key] = list;
+            }
+            list.Add(i);
+        }
+
+        if (stratifiedTarget > 0 && strata.Count > 0)
+        {
+            var groups = strata.Keys.OrderBy(_ => _random.Next()).ToArray();
+            while (selected.Count < stratifiedTarget)
+            {
+                bool added = false;
+                foreach (var g in groups)
+                {
+                    int chosen = WeightedPickFromCandidates(strata[g], weights, selected);
+                    if (chosen < 0) continue;
+                    selected.Add(chosen);
+                    added = true;
+                    if (selected.Count >= stratifiedTarget) break;
+                }
+
+                if (!added) break;
+            }
+        }
+
+        // Fill the remainder with regular PER from remaining transitions.
+        while (selected.Count < n)
+        {
+            int chosen = WeightedPickFromCandidates(
+                Enumerable.Range(0, _count), weights, selected);
+            if (chosen < 0) break;
+            selected.Add(chosen);
+        }
+
+        // Fallback fill if sampling got stuck.
+        while (selected.Count < n)
+            selected.Add(_random.Next(_count));
+
+        var chosenIndices = selected.Take(n).ToArray();
+        var batch = new PrioritizedTransition[n];
+        var indices = new int[n];
+        var isWeights = new double[n];
+
+        double maxIsW = double.MinValue;
+        for (int i = 0; i < n; i++)
+        {
+            int idx = chosenIndices[i];
+            batch[i] = _buffer[idx];
+            indices[i] = idx;
+
+            double prob = Math.Max(weights[idx] / totalWeight, 1e-12);
+            double isw  = Math.Pow(Math.Max(_count * prob, 1e-12), -Math.Clamp(beta, 0.0, 1.0));
+            isWeights[i] = isw;
+            if (isw > maxIsW) maxIsW = isw;
+        }
+
+        if (maxIsW <= 0) maxIsW = 1.0;
+        for (int i = 0; i < isWeights.Length; i++)
+            isWeights[i] /= maxIsW;
+
+        return (batch, indices, isWeights);
+    }
+
+    private int WeightedPickFromCandidates(
+        IEnumerable<int> candidateIndices,
+        IReadOnlyList<double> weights,
+        HashSet<int> selected)
+    {
+        double sum = 0.0;
+        var filtered = new List<int>();
+        foreach (int idx in candidateIndices)
+        {
+            if (idx < 0 || idx >= _count) continue;
+            if (selected.Contains(idx)) continue;
+            double w = weights[idx];
+            if (w <= 0) continue;
+            filtered.Add(idx);
+            sum += w;
+        }
+
+        if (filtered.Count == 0 || sum <= 0) return -1;
+
+        double sample = _random.NextDouble() * sum;
+        double cum = 0.0;
+        foreach (int idx in filtered)
+        {
+            cum += weights[idx];
+            if (cum >= sample) return idx;
+        }
+
+        return filtered[^1];
+    }
+
+    private static string BuildReplayGroupKey(string stateKey)
+    {
+        // Expected stateKey format:
+        // battery,solPhase,dist,dir,minerals,returnMargin,batteryTrend
+        // For legacy keys, returnMargin may be urgency at index 5.
+        var parts = stateKey.Split(',');
+        if (parts.Length < 2) return "unknown";
+        string battery = parts[0];
+        string solPhase = parts[1];
+        string margin = parts.Length > 5 ? parts[5] : "0";
+        return $"{solPhase}:{battery}:{margin}";
     }
 
     // ── Priority update ───────────────────────────────────────────────────────

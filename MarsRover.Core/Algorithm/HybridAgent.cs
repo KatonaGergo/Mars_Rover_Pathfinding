@@ -26,10 +26,8 @@ public class HybridAgent
     // ── Constants ─────────────────────────────────────────────────────────────
     private const int    ReturnSafetyBuffer  = 1;
     private const double BatterySafetyMargin = 3.0;
-    private const double DetourThreshold     = 6.0;
     private const int    LookaheadTopK       = 6;
     private const double LookaheadWeight     = 0.35;
-    private const int    UrgencyBufferTicks  = 2;
 
     // ── Fields ────────────────────────────────────────────────────────────────
     private readonly QTable  _qTable;
@@ -40,6 +38,8 @@ public class HybridAgent
     public double      Epsilon         { get; set; } = 1.0;
     public double      EpsilonMin      { get; set; } = 0.05;
     public double      EpsilonDecay    { get; set; } = 0.995;
+    public bool        UseAdaptiveEpsilon { get; set; } = false;
+    public double      AdaptiveEpsilonMax { get; set; } = 1.0;
     public QTable      QTable          => _qTable;
     public MissionPhase CurrentPhase   => _phase;
     public int         LastDecisionIdx { get; private set; } = -1;
@@ -50,6 +50,8 @@ public class HybridAgent
     private int[,]?         _cachedDistanceField;
     private int             _cachedFieldX = int.MinValue;
     private int             _cachedFieldY = int.MinValue;
+    private readonly Dictionary<string, int> _stateVisits = new();
+    private double?         _prevDecisionBattery;
 
     public HybridAgent(GameMap map, int totalTicks, QTable? existingTable = null, int seed = 42)
     {
@@ -67,7 +69,11 @@ public class HybridAgent
         LastDecisionIdx = -1;
 
         if (_phase == MissionPhase.AtBase)
-            return (RoverAction.StandbyAction, -1);
+        {
+            if (!ShouldLeaveBase(state, liveMap))
+                return (RoverAction.StandbyAction, -1);
+            _phase = MissionPhase.Collection;
+        }
 
         if (_phase != MissionPhase.Returning && MustReturnNow(state, liveMap))
         {
@@ -104,6 +110,7 @@ public class HybridAgent
         var decision = MakeStrategicDecision(state, liveMap, isTraining);
         var action   = ExecuteDecision(decision, state, liveMap);
         LastDecisionIdx = DecisionToIndex(decision);
+        _prevDecisionBattery = state.Battery;
         return (action, LastDecisionIdx);
     }
 
@@ -112,16 +119,53 @@ public class HybridAgent
 
     // ── Phase logic ───────────────────────────────────────────────────────────
 
+    private bool ShouldLeaveBase(RoverState state, GameMap liveMap)
+    {
+        if (liveMap.RemainingMinerals.Count == 0) return false;
+        int ticksRemaining = _totalTicks - state.Tick;
+        if (ticksRemaining <= ReturnSafetyBuffer) return false;
+
+        var roverField = GetDistanceField(state.X, state.Y, liveMap);
+        var baseField  = GetBaseDistanceField(liveMap);
+        var conservative = EvaluateFeasibleMinerals(
+            state, liveMap, roverField, baseField, RiskMode.Conservative);
+        if (conservative.Count > 0) return true;
+
+        var aggressive = EvaluateFeasibleMinerals(
+            state, liveMap, roverField, baseField, RiskMode.Aggressive);
+        return aggressive.Count > 0;
+    }
+
+    private static int MarginBucketFromTicks(int marginTicks) => marginTicks switch
+    {
+        <= 0 => 0,
+        <= 2 => 1,
+        <= 5 => 2,
+        _    => 3
+    };
+
+    private int ComputeReturnMarginTicks(RoverState state, GameMap liveMap)
+    {
+        int ticksRemaining = _totalTicks - state.Tick;
+        int returnSteps    = DistanceToBaseSteps(state, liveMap);
+        if (returnSteps == int.MaxValue) return int.MinValue;
+
+        var plan = SimulateReturnLegAggressive(state.Tick, returnSteps, state.Battery);
+        if (!plan.IsFeasible) return int.MinValue;
+        return ticksRemaining - (plan.Ticks + ReturnSafetyBuffer);
+    }
+
     private bool MustReturnNow(RoverState state, GameMap liveMap)
     {
         int ticksRemaining = _totalTicks - state.Tick;
         int returnSteps = DistanceToBaseSteps(state, liveMap);
         if (returnSteps == int.MaxValue) return true;
 
-        var plan = SimulateDynamicLeg(state.Tick, returnSteps, state.Battery);
+        var plan = SimulateReturnLegAggressive(state.Tick, returnSteps, state.Battery);
         if (!plan.IsFeasible) return true;
 
-        return ticksRemaining <= plan.Ticks + ReturnSafetyBuffer;
+        int marginTicks = ticksRemaining - (plan.Ticks + ReturnSafetyBuffer);
+        return marginTicks <= 0;
     }
 
     private RoverAction NavigateHome(RoverState state, GameMap liveMap)
@@ -135,7 +179,8 @@ public class HybridAgent
         return NavigateTo(liveMap.StartX, liveMap.StartY, state, liveMap);
     }
 
-    private (int x, int y)? FindDetourMineral(RoverState state, GameMap liveMap)
+    private (int x, int y)? FindDetourMineral(
+        RoverState state, GameMap liveMap, RiskMode risk = RiskMode.Conservative)
     {
         if (liveMap.RemainingMinerals.Count == 0) return null;
         int ticksRemaining = _totalTicks - state.Tick;
@@ -146,6 +191,9 @@ public class HybridAgent
 
         (int x, int y)? best   = null;
         double bestScore       = double.MinValue;
+        double requiredMargin  = RequiredBatteryMargin(risk);
+        double detourPenalty   = risk == RiskMode.Aggressive ? 0.9 : 1.35;
+        double marginWeight    = risk == RiskMode.Aggressive ? 5.5 : 4.0;
 
         foreach (var pos in liveMap.RemainingMinerals)
         {
@@ -156,7 +204,6 @@ public class HybridAgent
             if (stepsHome == int.MaxValue) continue;
 
             int detourCost = Math.Max(0, stepsToMineral + stepsHome - directSteps);
-            if (detourCost > DetourThreshold) continue;
 
             var legToMineral = SimulateLegWithPolicy(
                 state.Tick, stepsToMineral, state.Battery);
@@ -164,17 +211,24 @@ public class HybridAgent
 
             int tickAtMineral     = state.Tick + legToMineral.Ticks;
             double battAfterMine  = ApplyMiningTick(legToMineral.FinalBattery, tickAtMineral);
-            if (battAfterMine < BatterySafetyMargin) continue;
+            if (battAfterMine < requiredMargin) continue;
 
-            var legHome = SimulateDynamicLeg(tickAtMineral + 1, stepsHome, battAfterMine);
+            var legHome = SimulateReturnLegAggressive(tickAtMineral + 1, stepsHome, battAfterMine);
             if (!legHome.IsFeasible) continue;
 
-            if (legToMineral.Ticks + 1 + legHome.Ticks + ReturnSafetyBuffer > ticksRemaining)
+            int missionTicks = legToMineral.Ticks + 1 + legHome.Ticks + ReturnSafetyBuffer;
+            int marginTicks  = ticksRemaining - missionTicks;
+            if (marginTicks < 0)
                 continue;
-            if (legHome.MinBattery < BatterySafetyMargin) continue;
+            double marginBattery = legHome.MinBattery - requiredMargin;
+            if (marginBattery < 0) continue;
 
-            // Prefer low-detour minerals that still keep strong return margin.
-            double score = 100.0 / (detourCost + 1.0) - stepsHome * 0.03 + battAfterMine * 0.01;
+            // Margin-aware detour score: accept a longer detour if time/battery margins are healthy.
+            double score = 100.0 / (stepsToMineral + 1.0)
+                         + marginTicks * marginWeight
+                         + marginBattery * 0.8
+                         - detourCost * detourPenalty
+                         - stepsHome * 0.05;
             if (score > bestScore)
             {
                 bestScore = score;
@@ -190,9 +244,49 @@ public class HybridAgent
     private HybridDecision MakeStrategicDecision(RoverState state, GameMap liveMap, bool isTraining)
     {
         var qState = BuildQLearningState(state, liveMap);
-        if (isTraining && _random.NextDouble() < Epsilon)
+        string key = qState.ToKey();
+        double eps = isTraining ? EffectiveEpsilonForState(key) : 0.0;
+        if (isTraining && _random.NextDouble() < eps)
             return ExploreRandomDecision(liveMap);
         return ExploitBestDecision(qState, liveMap);
+    }
+
+    private double EffectiveEpsilonForState(string stateKey)
+    {
+        if (!UseAdaptiveEpsilon) return Epsilon;
+
+        int visits = _stateVisits.GetValueOrDefault(stateKey, 0) + 1;
+        _stateVisits[stateKey] = visits;
+
+        double visitFactor = 1.0 / Math.Sqrt(visits);
+        double actionGap = ActionGap(stateKey);
+        double actionGapFactor = 1.0 / (1.0 + Math.Max(0.0, actionGap));
+        double eps = Epsilon * visitFactor * actionGapFactor * 2.0;
+        return Math.Clamp(eps, EpsilonMin, AdaptiveEpsilonMax);
+    }
+
+    private double ActionGap(string stateKey)
+    {
+        int n = (int)HybridDecision.Count;
+        double best = double.MinValue;
+        double second = double.MinValue;
+
+        for (int i = 0; i < n; i++)
+        {
+            double q = _qTable.GetByKey(stateKey, i, n);
+            if (q > best)
+            {
+                second = best;
+                best = q;
+            }
+            else if (q > second)
+            {
+                second = q;
+            }
+        }
+
+        if (best == double.MinValue || second == double.MinValue) return 0.0;
+        return best - second;
     }
 
     private HybridDecision ExploitBestDecision(HybridQLearningState qState, GameMap liveMap)
@@ -206,8 +300,8 @@ public class HybridAgent
         // override that with a premature ReturnToBase while minerals still exist.
         if (liveMap.RemainingMinerals.Count > 0)
         {
-            if (decision == HybridDecision.ReturnToBase) return HybridDecision.SeekMineral;
-            if (decision == HybridDecision.Standby)      return HybridDecision.SeekMineral;
+            if (decision == HybridDecision.ReturnToBase) return HybridDecision.SeekBestConservative;
+            if (decision == HybridDecision.Standby)      return HybridDecision.SeekBestConservative;
         }
 
         return decision;
@@ -217,8 +311,10 @@ public class HybridAgent
     {
         if (liveMap.RemainingMinerals.Count == 0) return HybridDecision.ReturnToBase;
         double r = _random.NextDouble();
-        if (r < 0.75) return HybridDecision.SeekMineral;
-        if (r < 0.90) return HybridDecision.SeekNearestMineral;
+        if (r < 0.45) return HybridDecision.SeekBestConservative;
+        if (r < 0.70) return HybridDecision.SeekBestAggressive;
+        if (r < 0.85) return HybridDecision.SeekNearestConservative;
+        if (r < 0.95) return HybridDecision.SeekNearestAggressive;
         return HybridDecision.ReturnToBase;
     }
 
@@ -226,14 +322,28 @@ public class HybridAgent
     {
         (int tx, int ty)? target = decision switch
         {
-            HybridDecision.SeekMineral        => PickBestMineral(state, liveMap),
-            HybridDecision.SeekNearestMineral => PickNearestMineral(state, liveMap),
-            HybridDecision.ReturnToBase       => (liveMap.StartX, liveMap.StartY),
-            _                                 => null
+            HybridDecision.SeekBestConservative    => PickBestMineral(state, liveMap, RiskMode.Conservative),
+            HybridDecision.SeekBestAggressive      => PickBestMineral(state, liveMap, RiskMode.Aggressive),
+            HybridDecision.SeekNearestConservative => PickNearestMineral(state, liveMap, RiskMode.Conservative),
+            HybridDecision.SeekNearestAggressive   => PickNearestMineral(state, liveMap, RiskMode.Aggressive),
+            HybridDecision.ReturnToBase            => (liveMap.StartX, liveMap.StartY),
+            _                                      => null
         };
 
         if (target == null && decision != HybridDecision.ReturnToBase)
         {
+            // Corridor opportunism: before committing to home, check if a nearby
+            // margin-safe mineral has become viable along the return corridor.
+            var corridor = FindDetourMineral(
+                state, liveMap,
+                decision is HybridDecision.SeekBestAggressive
+                or HybridDecision.SeekNearestAggressive
+                    ? RiskMode.Aggressive
+                    : RiskMode.Conservative);
+
+            if (corridor.HasValue)
+                return NavigateTo(corridor.Value.x, corridor.Value.y, state, liveMap);
+
             _phase = MissionPhase.Returning;
             _currentPath.Clear();
             return NavigateHome(state, liveMap);
@@ -318,13 +428,20 @@ public class HybridAgent
 
     // ── Target selection ──────────────────────────────────────────────────────
 
-    private (int x, int y)? PickBestMineral(RoverState state, GameMap liveMap)
+    private static double RequiredBatteryMargin(RiskMode mode)
+        => mode == RiskMode.Aggressive ? BatterySafetyMargin : BatterySafetyMargin + 1.5;
+
+    private static double LookaheadMultiplier(RiskMode mode)
+        => mode == RiskMode.Aggressive ? 1.25 : 0.85;
+
+    private (int x, int y)? PickBestMineral(
+        RoverState state, GameMap liveMap, RiskMode mode)
     {
         if (liveMap.RemainingMinerals.Count == 0) return null;
 
         var roverField = GetDistanceField(state.X, state.Y, liveMap);
         var baseField  = GetBaseDistanceField(liveMap);
-        var feasible   = EvaluateFeasibleMinerals(state, liveMap, roverField, baseField);
+        var feasible   = EvaluateFeasibleMinerals(state, liveMap, roverField, baseField, mode);
         if (feasible.Count == 0) return null;
 
         feasible.Sort((a, b) => b.BaseScore.CompareTo(a.BaseScore));
@@ -339,7 +456,8 @@ public class HybridAgent
             double score = plan.BaseScore;
 
             if (i < lookaheadCount)
-                score += LookaheadWeight * BestSecondLegScore(plan, liveMap, baseField, state.Tick);
+                score += (LookaheadWeight * LookaheadMultiplier(mode))
+                       * BestSecondLegScore(plan, liveMap, baseField, state.Tick, mode);
 
             if (score > bestScore)
             {
@@ -363,13 +481,14 @@ public class HybridAgent
     /// SeekMineral (plan ahead); low-battery/late-day favours SeekNearest (grab
     /// whatever is reachable before the return window closes).
     /// </summary>
-    private (int x, int y)? PickNearestMineral(RoverState state, GameMap liveMap)
+    private (int x, int y)? PickNearestMineral(
+        RoverState state, GameMap liveMap, RiskMode mode)
     {
         if (liveMap.RemainingMinerals.Count == 0) return null;
 
         var roverField = GetDistanceField(state.X, state.Y, liveMap);
         var baseField  = GetBaseDistanceField(liveMap);
-        var feasible   = EvaluateFeasibleMinerals(state, liveMap, roverField, baseField);
+        var feasible   = EvaluateFeasibleMinerals(state, liveMap, roverField, baseField, mode);
         if (feasible.Count == 0) return null;
 
         var nearest = feasible
@@ -381,10 +500,13 @@ public class HybridAgent
     }
 
     private List<MineralCandidatePlan> EvaluateFeasibleMinerals(
-        RoverState state, GameMap liveMap, int[,] roverField, int[,] baseField)
+        RoverState state, GameMap liveMap, int[,] roverField, int[,] baseField, RiskMode mode)
     {
         int ticksRemaining = _totalTicks - state.Tick;
         var candidates = new List<MineralCandidatePlan>();
+        double requiredMargin = RequiredBatteryMargin(mode);
+        double detourPenalty = mode == RiskMode.Aggressive ? 0.04 : 0.065;
+        double marginBonus = mode == RiskMode.Aggressive ? 3.2 : 2.3;
 
         foreach (var pos in liveMap.RemainingMinerals)
         {
@@ -400,16 +522,22 @@ public class HybridAgent
 
             int tickAtMineral = state.Tick + legToMineral.Ticks;
             double battAfterMine = ApplyMiningTick(legToMineral.FinalBattery, tickAtMineral);
-            if (battAfterMine < BatterySafetyMargin) continue;
+            if (battAfterMine < requiredMargin) continue;
 
-            var legHome = SimulateDynamicLeg(tickAtMineral + 1, stepsHome, battAfterMine);
+            var legHome = SimulateReturnLegAggressive(tickAtMineral + 1, stepsHome, battAfterMine);
             if (!legHome.IsFeasible) continue;
-            if (legHome.MinBattery < BatterySafetyMargin) continue;
+            if (legHome.MinBattery < requiredMargin) continue;
 
-            if (legToMineral.Ticks + 1 + legHome.Ticks + ReturnSafetyBuffer > ticksRemaining)
+            int missionTicks = legToMineral.Ticks + 1 + legHome.Ticks + ReturnSafetyBuffer;
+            int marginTicks = ticksRemaining - missionTicks;
+            if (marginTicks < 0)
                 continue;
 
-            double baseScore = 100.0 / (stepsToMineral + 1.0) - stepsHome * 0.05;
+            double marginBattery = legHome.MinBattery - requiredMargin;
+            double baseScore = 100.0 / (stepsToMineral + 1.0)
+                             + marginTicks * marginBonus
+                             + marginBattery * 0.75
+                             - stepsHome * detourPenalty;
             candidates.Add(new MineralCandidatePlan(
                 X:               pos.x,
                 Y:               pos.y,
@@ -425,11 +553,14 @@ public class HybridAgent
     }
 
     private double BestSecondLegScore(
-        MineralCandidatePlan first, GameMap liveMap, int[,] baseField, int missionTickAtStart)
+        MineralCandidatePlan first, GameMap liveMap, int[,] baseField,
+        int missionTickAtStart, RiskMode mode)
     {
         var fromFirstField = AStarPathfinder.BuildDistanceField(liveMap, first.X, first.Y);
         int ticksRemaining = _totalTicks - missionTickAtStart;
         double best = 0.0;
+        double requiredMargin = RequiredBatteryMargin(mode);
+        double returnPenalty = mode == RiskMode.Aggressive ? 0.04 : 0.06;
 
         foreach (var pos in liveMap.RemainingMinerals)
         {
@@ -447,16 +578,16 @@ public class HybridAgent
 
             int tickAtSecond = first.TickAfterMine + legAB.Ticks;
             double battAfterSecondMine = ApplyMiningTick(legAB.FinalBattery, tickAtSecond);
-            if (battAfterSecondMine < BatterySafetyMargin) continue;
+            if (battAfterSecondMine < requiredMargin) continue;
 
-            var legHome = SimulateDynamicLeg(tickAtSecond + 1, stepsHome, battAfterSecondMine);
+            var legHome = SimulateReturnLegAggressive(tickAtSecond + 1, stepsHome, battAfterSecondMine);
             if (!legHome.IsFeasible) continue;
-            if (legHome.MinBattery < BatterySafetyMargin) continue;
+            if (legHome.MinBattery < requiredMargin) continue;
 
             int totalTicks = first.TicksToMineral + 1 + legAB.Ticks + 1 + legHome.Ticks + ReturnSafetyBuffer;
             if (totalTicks > ticksRemaining) continue;
 
-            double score = 100.0 / (stepsAB + 1.0) - stepsHome * 0.05;
+            double score = 100.0 / (stepsAB + 1.0) - stepsHome * returnPenalty;
             if (score > best) best = score;
         }
 
@@ -619,6 +750,58 @@ public class HybridAgent
         return new DynamicLegPlan(true, ticksUsed, battery, minBattery);
     }
 
+    /// <summary>
+    /// Return-feasibility simulator that mirrors the actual return movement
+    /// policy: pick the fastest safe speed each tick, including night Fast.
+    /// </summary>
+    private DynamicLegPlan SimulateReturnLegAggressive(int startTick, int pathSteps, double batteryAtStart)
+    {
+        if (pathSteps <= 0)
+            return new DynamicLegPlan(true, 0, batteryAtStart, batteryAtStart);
+
+        int stepsRemaining = pathSteps;
+        int tick = startTick;
+        int ticksUsed = 0;
+        double battery = Math.Clamp(batteryAtStart, 0, EnergyCalculator.MaxBattery);
+        double minBattery = battery;
+
+        while (stepsRemaining > 0)
+        {
+            RoverSpeed max = MaxSpeedByDistance(stepsRemaining);
+            RoverSpeed[] candidates = max switch
+            {
+                RoverSpeed.Fast   => [RoverSpeed.Fast, RoverSpeed.Normal, RoverSpeed.Slow],
+                RoverSpeed.Normal => [RoverSpeed.Normal, RoverSpeed.Slow],
+                _                 => [RoverSpeed.Slow]
+            };
+
+            RoverSpeed? chosen = null;
+            double chosenBattery = battery;
+
+            foreach (var speed in candidates)
+            {
+                bool isDay = SimulationEngine.IsDay(tick);
+                double nextBattery = EnergyCalculator.Apply(
+                    battery, RoverActionType.Move, speed, isDay);
+                if (nextBattery < BatterySafetyMargin) continue;
+                chosen = speed;
+                chosenBattery = nextBattery;
+                break;
+            }
+
+            if (chosen == null)
+                return new DynamicLegPlan(false, ticksUsed, battery, minBattery);
+
+            stepsRemaining -= (int)chosen.Value;
+            battery = chosenBattery;
+            minBattery = Math.Min(minBattery, battery);
+            tick++;
+            ticksUsed++;
+        }
+
+        return new DynamicLegPlan(true, ticksUsed, battery, minBattery);
+    }
+
     private static RoverSpeed NightSpeedPolicy(int stepsRemaining)
         => stepsRemaining == 2 ? RoverSpeed.Normal : RoverSpeed.Slow;
 
@@ -682,6 +865,8 @@ public class HybridAgent
         _cachedDistanceField = null;
         _cachedFieldX = int.MinValue;
         _cachedFieldY = int.MinValue;
+        _stateVisits.Clear();
+        _prevDecisionBattery = null;
     }
 
     private int DistanceToBaseSteps(RoverState state, GameMap liveMap)
@@ -717,12 +902,9 @@ public class HybridAgent
     private static int FieldDistance(int[,] field, int x, int y)
         => field[x, y];
 
-    // ── State builder — 1,800 states (was 1,200) ─────────────────────────────
-    // Expanding IsDay (2 values) → SolPhaseBucket (3 values) so the Q-table
-    // can learn distinct policies for early-day, late-day and night phases.
-    // Without this, a 24h-trained model sees all night ticks as "last 16 ticks
-    // of the mission" and panics, whereas multi-sol night ticks are routine.
-    // State space: 5×3×5×4×3×2 = 1,800  (was 5×2×5×4×3×2 = 1,200)
+    // ── State builder — 10,800 states ────────────────────────────────────────
+    // State space: 5×3×5×4×3×4×3 = 10,800
+    // (Battery × SolPhase × Dist × Dir × MineralsLeft × ReturnMargin × BatteryTrend)
 
     public HybridQLearningState BuildQLearningState(RoverState state, GameMap liveMap)
     {
@@ -763,15 +945,8 @@ public class HybridAgent
             dirBucket = (dx >= 0 ? 0 : 1) + (dy >= 0 ? 0 : 2); // 0=SE,1=SW,2=NE,3=NW
         }
 
-        // Urgency: based on exact dynamic return estimate
-        int ticksRemaining = _totalTicks - state.Tick;
-        int returnSteps = DistanceToBaseSteps(state, liveMap);
-        var returnPlan = returnSteps == int.MaxValue
-            ? new DynamicLegPlan(false, 0, state.Battery, state.Battery)
-            : SimulateDynamicLeg(state.Tick, returnSteps, state.Battery);
-        int urgencyBucket = (!returnPlan.IsFeasible
-                             || ticksRemaining <= returnPlan.Ticks + UrgencyBufferTicks)
-            ? 0 : 1;
+        int returnMarginTicks = ComputeReturnMarginTicks(state, liveMap);
+        int returnMarginBucket = MarginBucketFromTicks(returnMarginTicks);
 
         // Minerals left: 3 levels
         int mineralsLeft = liveMap.RemainingMinerals.Count switch
@@ -791,27 +966,42 @@ public class HybridAgent
                         : tickInSol >= 16                         ? 1   // late day
                                                                   : 2;  // early day
 
+        double batteryDelta = _prevDecisionBattery.HasValue
+            ? state.Battery - _prevDecisionBattery.Value
+            : 0.0;
+        int batteryTrendBucket = batteryDelta switch
+        {
+            < -3.0 => 0,
+            >  3.0 => 2,
+            _      => 1
+        };
+
         return new HybridQLearningState(battBucket, solPhase, distBucket,
-                                        dirBucket, mineralsLeft, urgencyBucket);
+                                        dirBucket, mineralsLeft, returnMarginBucket,
+                                        batteryTrendBucket);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static HybridDecision IndexToDecision(int idx) => idx switch
     {
-        0 => HybridDecision.SeekMineral,
-        1 => HybridDecision.SeekNearestMineral,
-        2 => HybridDecision.ReturnToBase,
-        3 => HybridDecision.Standby,
-        _ => HybridDecision.SeekMineral
+        0 => HybridDecision.SeekBestConservative,
+        1 => HybridDecision.SeekBestAggressive,
+        2 => HybridDecision.SeekNearestConservative,
+        3 => HybridDecision.SeekNearestAggressive,
+        4 => HybridDecision.ReturnToBase,
+        5 => HybridDecision.Standby,
+        _ => HybridDecision.SeekBestConservative
     };
 
     private static int DecisionToIndex(HybridDecision d) => d switch
     {
-        HybridDecision.SeekMineral        => 0,
-        HybridDecision.SeekNearestMineral => 1,
-        HybridDecision.ReturnToBase       => 2,
-        HybridDecision.Standby            => 3,
+        HybridDecision.SeekBestConservative    => 0,
+        HybridDecision.SeekBestAggressive      => 1,
+        HybridDecision.SeekNearestConservative => 2,
+        HybridDecision.SeekNearestAggressive   => 3,
+        HybridDecision.ReturnToBase            => 4,
+        HybridDecision.Standby                 => 5,
         _                                 => 0
     };
 
@@ -845,21 +1035,22 @@ public enum MissionPhase { Collection, Returning, AtBase }
 
 public enum HybridDecision
 {
-    SeekMineral,
-    SeekNearestMineral,
-    ReturnToBase,
-    Standby,
-    Count
+    SeekBestConservative    = 0,
+    SeekBestAggressive      = 1,
+    SeekNearestConservative = 2,
+    SeekNearestAggressive   = 3,
+    ReturnToBase            = 4,
+    Standby                 = 5,
+
+    // Legacy aliases for archived agents in Algorithm_Records.
+    SeekMineral             = SeekBestConservative,
+    SeekNearestMineral      = SeekNearestConservative,
+
+    Count                   = 6
 }
 
 /// <summary>
-/// 1,800-state Q-table key: 5×3×5×4×3×2
-/// Expanded from 1,200 (was 5×2×5×4×3×2) by replacing IsDay (2 values) with
-/// SolPhase (3 values: 0=night / 1=late-day / 2=early-day).
-/// This lets the Q-table learn distinct policies for each sol phase, which is
-/// critical for multi-sol missions where night is routine, not end-of-mission.
-/// All dimensions are relative — no absolute tick counts — so the same trained
-/// model transfers across any mission duration.
+/// 10,800-state Q-table key: 5×3×5×4×3×4×3
 /// </summary>
 public record struct HybridQLearningState(
     int  BatteryBucket,    // 0-4 (5 bands of 20%)
@@ -867,9 +1058,16 @@ public record struct HybridQLearningState(
     int  DistBucket,       // 0-4 (close/medium/far/very far/none)
     int  DirBucket,        // 0-3 (quadrant: SE/SW/NE/NW)
     int  MineralsLeft,     // 0-2 (none/few/many)
-    int  UrgencyBucket     // 0=urgent, 1=plenty of time
+    int  ReturnMarginBucket, // 0=<=0, 1=1-2, 2=3-5, 3=6+ ticks
+    int  BatteryTrendBucket  // 0=down, 1=flat, 2=up
 )
 {
     public string ToKey() =>
-        $"{BatteryBucket},{SolPhase},{DistBucket},{DirBucket},{MineralsLeft},{UrgencyBucket}";
+        $"{BatteryBucket},{SolPhase},{DistBucket},{DirBucket},{MineralsLeft},{ReturnMarginBucket},{BatteryTrendBucket}";
+}
+
+public enum RiskMode
+{
+    Conservative,
+    Aggressive
 }

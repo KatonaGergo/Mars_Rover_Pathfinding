@@ -1,6 +1,6 @@
-using System.Collections.Concurrent;
 using MarsRover.Core.Models;
 using MarsRover.Core.Simulation;
+using MarsRover.Core.Utils;
 
 namespace MarsRover.Core.Algorithm;
 
@@ -43,15 +43,15 @@ public class SimulationRunner
     private readonly int     _durationHours;
     private readonly int     _totalTicks;
     private readonly string  _modelPath;
+    private const int PolicySchemaVersion = 2;
+    public static int CurrentPolicySchemaVersion => PolicySchemaVersion;
 
     // ── Hyperparameters ───────────────────────────────────────────────────────
     private const int    BufferCapacity   = 20_000;
     private const int    BatchSize        = 64;
     private const int    WarmupEpisodes   = 10;   // episode-based warmup (not step-based)
     private static readonly int ParallelThreads = Math.Max(4, Environment.ProcessorCount);    // parallel episode collectors
-    private const double Lambda           = 0.7;  // eligibility trace decay (Q-λ)
-    private const double TraceThreshold   = 1e-4; // prune traces below this value
-    private const double ActionCount      = 4;    // HybridDecision.Count
+    private static int ActionCount => (int)HybridDecision.Count;
     private const double PerBetaStart     = 0.4;  // PER importance-sampling beta (start)
     private const double PerBetaEnd       = 1.0;  // PER importance-sampling beta (end)
 
@@ -86,11 +86,192 @@ public class SimulationRunner
     public TrainingResult Train(
         int episodes = 1000,
         Action<TrainingProgress>? onProgress = null)
-        => TrainWithBest(episodes, onProgress).result;
+        => Train(episodes, onProgress, options: null);
+
+    public TrainingResult Train(
+        int episodes,
+        Action<TrainingProgress>? onProgress,
+        TrainingOptions? options)
+        => TrainWithBest(episodes, onProgress, GetEffectiveOptions(options)).result;
 
     private (TrainingResult result, QTable bestTable) TrainWithBest(
         int episodes = 1000,
-        Action<TrainingProgress>? onProgress = null)
+        Action<TrainingProgress>? onProgress = null,
+        TrainingOptions? options = null)
+    {
+        var effective = GetEffectiveOptions(options);
+
+        if (effective.SeedSweep?.Enabled == true
+            && effective.SeedSweep.SeedCount > 1)
+        {
+            return TrainWithSeedSweep(episodes, onProgress, effective);
+        }
+
+        if (effective.Curriculum?.Enabled == true
+            && effective.Curriculum.RandomMapCount > 0
+            && effective.Curriculum.PretrainEpisodes > 0)
+        {
+            return TrainWithCurriculum(episodes, onProgress, effective);
+        }
+
+        return TrainCore(episodes, onProgress, effective);
+    }
+
+    private (TrainingResult result, QTable bestTable) TrainWithCurriculum(
+        int episodes,
+        Action<TrainingProgress>? onProgress,
+        TrainingOptions options)
+    {
+        var curriculum = options.Curriculum ?? new CurriculumOptions();
+        QTable? warmStart = null;
+
+        // Pretrain on generated maps
+        for (int i = 0; i < curriculum.RandomMapCount; i++)
+        {
+            int mapSeed = curriculum.RandomMapSeedStart + i;
+            var map = BuildGeneratedMap(mapSeed);
+            var runner = new SimulationRunner(map, _durationHours, $"{_modelPath}_curriculum_{mapSeed}");
+            var pretrainOptions = options with
+            {
+                Curriculum = new CurriculumOptions(false),
+                SeedSweep = new SeedSweepOptions(false),
+                ProfileName = $"{options.ProfileName}-curriculum-pretrain-{i}",
+                EpisodeSeedOffset = options.EpisodeSeedOffset + (i * 10_000)
+            };
+            warmStart = runner.TrainCore(
+                curriculum.PretrainEpisodes,
+                onProgress: null,
+                options: pretrainOptions,
+                warmStartTable: warmStart,
+                persistModel: false).bestTable;
+        }
+
+        // Fine-tune on official map
+        var finetuneOptions = options with
+        {
+            Curriculum = new CurriculumOptions(false),
+            SeedSweep = new SeedSweepOptions(false)
+        };
+
+        return TrainCore(
+            episodes > 0 ? episodes : curriculum.FineTuneEpisodes,
+            onProgress,
+            finetuneOptions,
+            warmStartTable: warmStart);
+    }
+
+    private (TrainingResult result, QTable bestTable) TrainWithSeedSweep(
+        int episodes,
+        Action<TrainingProgress>? onProgress,
+        TrainingOptions options)
+    {
+        var seedSweep = options.SeedSweep ?? new SeedSweepOptions();
+        int seedCount = Math.Max(1, seedSweep.SeedCount);
+
+        QTable? best = null;
+        double bestScore = double.MinValue;
+        TrainingResult? bestResult = null;
+
+        for (int seed = 0; seed < seedCount; seed++)
+        {
+            var seedOptions = options with
+            {
+                SeedSweep = new SeedSweepOptions(false),
+                ProfileName = $"{options.ProfileName}-seed{seed}",
+                EpisodeSeedOffset = options.EpisodeSeedOffset + (seed * 10_000)
+            };
+
+            var run = TrainCore(episodes, null, seedOptions, persistModel: false);
+            var eval = EvaluatePolicy(run.bestTable, seedSweep);
+            double score = eval.meanMinerals - 0.5 * eval.stdMinerals;
+            if (eval.returnRate < 1.0) score -= 1_000.0;
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[SeedSweep] seed={seed} mean={eval.meanMinerals:F2} std={eval.stdMinerals:F2} " +
+                $"returnRate={eval.returnRate:P1} score={score:F2}");
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = run.bestTable;
+                bestResult = run.result;
+            }
+        }
+
+        if (best == null || bestResult == null)
+            return TrainCore(episodes, onProgress, options);
+
+        SaveModel(best, episodes, bestResult.BestMinerals, options.ProfileName);
+        return (bestResult, best);
+    }
+
+    private (double meanMinerals, double stdMinerals, double returnRate) EvaluatePolicy(
+        QTable table,
+        SeedSweepOptions seedSweep)
+    {
+        int evalRepeats = Math.Max(1, seedSweep.EvalEpisodesPerSeed);
+        var validationMaps = BuildValidationMaps(seedSweep).ToList();
+        if (validationMaps.Count == 0)
+            validationMaps.Add(_map.Clone());
+
+        var samples = new List<double>(validationMaps.Count * evalRepeats);
+        int returned = 0;
+
+        for (int i = 0; i < validationMaps.Count; i++)
+        {
+            var evalMap = validationMaps[i];
+            for (int rep = 0; rep < evalRepeats; rep++)
+            {
+                var evalRunner = new SimulationRunner(
+                    evalMap.Clone(),
+                    _durationHours,
+                    $"{_modelPath}_eval_tmp");
+
+                var log = evalRunner.RunSimulation(
+                    tableOverride: table,
+                    missionEndMode: MissionEndMode.ContinueUntilDeadline);
+
+                if (log.Count == 0) continue;
+                var final = log[^1];
+                samples.Add(final.TotalMinerals);
+                bool returnedHome = final.X == evalMap.StartX && final.Y == evalMap.StartY;
+                if (returnedHome) returned++;
+            }
+        }
+
+        double mean = samples.Count == 0 ? 0.0 : samples.Average();
+        double var = 0.0;
+        foreach (var s in samples)
+            var += (s - mean) * (s - mean);
+        double std = samples.Count == 0 ? 0.0 : Math.Sqrt(var / samples.Count);
+        return (mean, std, samples.Count == 0 ? 0.0 : returned / (double)samples.Count);
+    }
+
+    private IEnumerable<GameMap> BuildValidationMaps(SeedSweepOptions seedSweep)
+    {
+        if (seedSweep.IncludeOfficialMapInValidation)
+            yield return _map.Clone();
+
+        var seeds = seedSweep.ValidationMapSeeds ?? [20_001, 20_101, 20_201];
+        foreach (int seed in seeds.Distinct())
+            yield return BuildGeneratedMap(seed);
+    }
+
+    private static GameMap BuildGeneratedMap(int seed)
+    {
+        string content = MapGenerator.GenerateMap(seed);
+        string[] lines = content
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        return GameMap.Parse(lines);
+    }
+
+    private (TrainingResult result, QTable bestTable) TrainCore(
+        int episodes,
+        Action<TrainingProgress>? onProgress,
+        TrainingOptions options,
+        QTable? warmStartTable = null,
+        int seedOffset = 0,
+        bool persistModel = true)
     {
         // ── Load or create Q-table ────────────────────────────────────────────
         // The Q-table values (the actual learned knowledge) are loaded from disk.
@@ -99,7 +280,9 @@ public class SimulationRunner
         // Restoring the saved epsilon (typically 0.05 after a converged run)
         // produces epsilonDecay = 1.0 for the entire run — the agent barely
         // explores and the Q-table barely changes, making the resume pointless.
-        var sharedTable  = HasSavedModel ? QTable.Load(QTablePath) : new QTable();
+        ValidateSavedModelCompatibility();
+        var sharedTable  = warmStartTable
+                         ?? (HasSavedModel ? QTable.Load(QTablePath) : new QTable());
         double startEpsilon = HasSavedModel ? 0.4 : 1.0;
         // Fresh run: 1.0 → 0.05 over N episodes (full exploration → convergence)
         // Resume:    0.4 → 0.05 over N episodes (re-explore without throwing away knowledge)
@@ -135,7 +318,12 @@ public class SimulationRunner
                 threadId =>
                 {
                     collected[threadId] = RunEpisode(
-                        sharedTable, iterEps, seed: epBase + threadId);
+                        sharedTable,
+                        iterEps,
+                        seed: options.EpisodeSeedOffset + seedOffset + epBase + threadId,
+                        options.MissionEndMode,
+                        options.UseAdaptiveEpsilon,
+                        options.AdaptiveEpsilonMax);
                 });
 
             // ── SERIAL MERGE PHASE ────────────────────────────────────────────
@@ -148,7 +336,8 @@ public class SimulationRunner
 
                 // ② ELIGIBILITY TRACES: always apply to sharedTable first
                 if (ep.Transitions.Count > 0)
-                    ApplyEligibilityTraces(ep.Transitions, sharedTable);
+                    ApplyEligibilityTraces(ep.Transitions, sharedTable,
+                                           options.Lambda, options.TraceThreshold);
 
                 if (ep.MineralsCollected > bestMinerals)
                 {
@@ -164,7 +353,7 @@ public class SimulationRunner
                 {
                     double tdErr = sharedTable.GetTDError(
                         t.StateKey, t.ActionIdx, t.Reward, t.NextStateKey,
-                        (int)ActionCount);
+                        ActionCount);
                     buffer.Push(t.StateKey, t.ActionIdx, t.Reward, t.NextStateKey,
                                 t.IsTerminal, Math.Abs(tdErr) + 1e-4);
                 }
@@ -193,7 +382,10 @@ public class SimulationRunner
             {
                 double betaProgress = Math.Clamp(epsDoneBatch / (double)Math.Max(episodes, 1), 0.0, 1.0);
                 double beta = PerBetaStart + (PerBetaEnd - PerBetaStart) * betaProgress;
-                var (batch, indices, isWeights) = buffer.Sample(BatchSize, beta);
+                var replayDiversity = options.ReplayDiversity ?? new ReplayDiversityOptions();
+                var (batch, indices, isWeights) = ShouldUseDiversityReplay(options)
+                    ? buffer.SampleWithDiversity(BatchSize, beta, replayDiversity.StratifiedFraction)
+                    : buffer.Sample(BatchSize, beta);
 
                 for (int i = 0; i < batch.Length; i++)
                 {
@@ -201,11 +393,11 @@ public class SimulationRunner
                     double weightedAlpha = sharedTable.LearningRate * isWeights[i];
                     sharedTable.UpdateByKeyWithAlpha(
                         t.StateKey, t.ActionIdx, t.Reward, t.NextStateKey,
-                        (int)ActionCount, weightedAlpha);
+                        ActionCount, weightedAlpha);
 
                     double newErr = sharedTable.GetTDError(
                         t.StateKey, t.ActionIdx, t.Reward, t.NextStateKey,
-                        (int)ActionCount);
+                        ActionCount);
                     buffer.UpdatePriority(indices[i], newErr);
                 }
             }
@@ -217,7 +409,8 @@ public class SimulationRunner
         // Save the best checkpoint — the table that actually achieved bestMinerals
         // not the final table which may have been updated by worse later episodes
         var tableToSave = bestTable.StateCount > 0 ? bestTable : sharedTable;
-        SaveModel(tableToSave, episodes, bestMinerals);
+        if (persistModel)
+            SaveModel(tableToSave, episodes, bestMinerals, options.ProfileName);
 
         return (new TrainingResult(episodes, bestMinerals, allRewards, sharedTable.StateCount),
                 tableToSave);
@@ -225,13 +418,21 @@ public class SimulationRunner
 
     // ── Single episode runner (runs on a thread) ──────────────────────────────
 
-    private EpisodeData RunEpisode(QTable sharedTable, double epsilon, int seed)
+    private EpisodeData RunEpisode(
+        QTable sharedTable,
+        double epsilon,
+        int seed,
+        MissionEndMode missionEndMode = MissionEndMode.ContinueUntilDeadline,
+        bool useAdaptiveEpsilon = false,
+        double adaptiveEpsilonMax = 1.0)
     {
         var episodeMap = _map.Clone();
         var engine     = new SimulationEngine(episodeMap, _durationHours);
         // Each thread gets its own agent — reads sharedTable, never writes
         var agent      = new HybridAgent(episodeMap, _totalTicks, sharedTable, seed);
         agent.Epsilon  = epsilon;
+        agent.UseAdaptiveEpsilon = useAdaptiveEpsilon;
+        agent.AdaptiveEpsilonMax = adaptiveEpsilonMax;
         agent.ResetNavigation();
 
         var    transitions  = new List<StrategicTransition>();
@@ -239,7 +440,8 @@ public class SimulationRunner
         double totalReward  = 0;
 
         while (!engine.IsFinished && !engine.BatteryDead
-               && agent.CurrentPhase != MissionPhase.AtBase)
+               && (missionEndMode == MissionEndMode.ContinueUntilDeadline
+                   || agent.CurrentPhase != MissionPhase.AtBase))
         {
             var state    = engine.GetState();
             var qState   = agent.BuildQLearningState(state, episodeMap);
@@ -340,11 +542,13 @@ public class SimulationRunner
     /// Without traces, only step 8 would be updated.
     /// </summary>
     private static void ApplyEligibilityTraces(
-        List<StrategicTransition> transitions, QTable table)
+        List<StrategicTransition> transitions,
+        QTable table,
+        double lambda,
+        double traceThreshold)
     {
         const double gamma  = 0.95;
-        const double lambda = Lambda;
-        const int    nAct   = (int)ActionCount;
+        int nAct = ActionCount;
 
         // Trace dictionary: (stateKey, actionIdx) → eligibility value
         var traces = new Dictionary<(string, int), double>();
@@ -369,7 +573,7 @@ public class SimulationRunner
                     traceKey.Item1, traceKey.Item2, nAct, alpha, delta, e);
 
                 double newE = e * gamma * lambda;
-                if (newE < TraceThreshold)
+                if (newE < traceThreshold)
                     toRemove.Add(traceKey);
                 else
                     traces[traceKey] = newE;
@@ -395,8 +599,12 @@ public class SimulationRunner
     /// The correct answer to "simulation scores lower than training best" is
     /// more training episodes so the Q-table converges to the better policy.
     /// </summary>
-    public List<SimulationLogEntry> RunSimulation(QTable? tableOverride = null)
+    public List<SimulationLogEntry> RunSimulation(
+        QTable? tableOverride = null,
+        MissionEndMode missionEndMode = MissionEndMode.ContinueUntilDeadline)
     {
+        if (tableOverride == null)
+            ValidateSavedModelCompatibility();
         var table = tableOverride
                     ?? (HasSavedModel ? QTable.Load(QTablePath) : new QTable());
 
@@ -409,7 +617,8 @@ public class SimulationRunner
         var log     = new List<SimulationLogEntry>();
 
         while (!engine.IsFinished && !engine.BatteryDead
-               && agent.CurrentPhase != MissionPhase.AtBase)
+               && (missionEndMode == MissionEndMode.ContinueUntilDeadline
+                   || agent.CurrentPhase != MissionPhase.AtBase))
         {
             var state  = engine.GetState();
             var action = agent.SelectAction(state, liveMap, isTraining: false);
@@ -446,11 +655,20 @@ public class SimulationRunner
     public (TrainingResult training, List<SimulationLogEntry> log) TrainAndRun(
         int episodes = 1000,
         Action<TrainingProgress>? onProgress = null)
+        => TrainAndRun(episodes, onProgress, options: null);
+
+    public (TrainingResult training, List<SimulationLogEntry> log) TrainAndRun(
+        int episodes,
+        Action<TrainingProgress>? onProgress,
+        TrainingOptions? options)
     {
+        var effective = GetEffectiveOptions(options);
         // Train returns the best Q-table snapshot in addition to the result
-        var (training, bestTable) = TrainWithBest(episodes, onProgress);
+        var (training, bestTable) = TrainWithBest(episodes, onProgress, effective);
         // Pass in-memory bestTable directly — no disk round-trip, guaranteed correct policy
-        var log = RunSimulation(tableOverride: bestTable);
+        var log = RunSimulation(
+            tableOverride: bestTable,
+            missionEndMode: effective.MissionEndMode);
         return (training, log);
     }
 
@@ -464,6 +682,17 @@ public class SimulationRunner
             TotalReward:       ep.TotalReward,
             BatteryDied:       ep.BatteryDied,
             ReturnedHome:      ep.ReturnedHome);
+
+    private static TrainingOptions GetEffectiveOptions(TrainingOptions? options)
+    {
+        var effective = options ?? TrainingProfileFactory.CreateOptions(TrainingProfileFactory.DefaultProfile);
+        if (string.IsNullOrWhiteSpace(effective.ProfileName))
+            effective = effective with { ProfileName = TrainingProfileFactory.DefaultProfile.ToString() };
+        return effective;
+    }
+
+    public static bool ShouldUseDiversityReplay(TrainingOptions options)
+        => (options.ReplayDiversity ?? new ReplayDiversityOptions()).Enabled;
 
     // ── Persistence ───────────────────────────────────────────────────────────
 
@@ -484,8 +713,7 @@ public class SimulationRunner
     public static ModelInfo? GetModelInfo(string modelPath)
     {
         // Normalise: strip any existing prefix then re-apply, same as constructor
-        string baseName    = Path.GetFileName(modelPath);
-        string resolvedPath = Path.Combine("Saved_Models", baseName);
+        string resolvedPath = ResolveModelPath(modelPath);
 
         string qtablePath = resolvedPath + ".qtable.json";
         string metaPath   = resolvedPath + ".meta.json";
@@ -513,10 +741,76 @@ public class SimulationRunner
             BestMinerals:      meta.BestMinerals,
             Epsilon:           0.4, // resume epsilon — always resets to this, not saved
             SavedAt:           meta.SavedAt,
-            StatesKnown:       stateCount);
+            StatesKnown:       stateCount,
+            PolicySchemaVersion: meta.PolicySchemaVersion,
+            TrainingProfile:   string.IsNullOrWhiteSpace(meta.TrainingProfile) ? "legacy" : meta.TrainingProfile);
     }
 
-    private void SaveModel(QTable table, int episodesCompleted, int bestMinerals)
+    public static ModelResetResult ResetSavedModel(string modelPath, bool archive = true)
+    {
+        string resolvedPath = ResolveModelPath(modelPath);
+        string qtablePath   = resolvedPath + ".qtable.json";
+        string metaPath     = resolvedPath + ".meta.json";
+
+        var modelFiles = new List<string>(2);
+        if (File.Exists(qtablePath)) modelFiles.Add(qtablePath);
+        if (File.Exists(metaPath)) modelFiles.Add(metaPath);
+
+        if (modelFiles.Count == 0)
+            return new ModelResetResult(
+                HadModel: false,
+                Archived: false,
+                ArchiveDirectory: null,
+                ProcessedFiles: Array.Empty<string>());
+
+        if (archive)
+        {
+            string archiveDir = Path.Combine(
+                SavedModelsDir,
+                "archive",
+                $"{Path.GetFileName(resolvedPath)}_{DateTime.UtcNow:yyyyMMdd_HHmmss}");
+            Directory.CreateDirectory(archiveDir);
+
+            foreach (string file in modelFiles)
+            {
+                string dest = Path.Combine(archiveDir, Path.GetFileName(file));
+                File.Move(file, dest, overwrite: true);
+            }
+
+            return new ModelResetResult(
+                HadModel: true,
+                Archived: true,
+                ArchiveDirectory: archiveDir,
+                ProcessedFiles: modelFiles);
+        }
+
+        foreach (string file in modelFiles)
+            File.Delete(file);
+
+        return new ModelResetResult(
+            HadModel: true,
+            Archived: false,
+            ArchiveDirectory: null,
+            ProcessedFiles: modelFiles);
+    }
+
+    private void ValidateSavedModelCompatibility()
+    {
+        if (!HasSavedModel) return;
+        var meta = LoadMeta();
+        if (meta.PolicySchemaVersion != PolicySchemaVersion)
+        {
+            throw new InvalidOperationException(
+                $"Saved model schema mismatch. Expected v{PolicySchemaVersion}, found v{meta.PolicySchemaVersion}. " +
+                "Retraining is required.");
+        }
+    }
+
+    private void SaveModel(
+        QTable table,
+        int episodesCompleted,
+        int bestMinerals,
+        string profileName)
     {
         Directory.CreateDirectory(SavedModelsDir);
         table.Save(QTablePath);
@@ -525,7 +819,9 @@ public class SimulationRunner
         {
             EpisodesCompleted = episodesCompleted,
             BestMinerals      = bestMinerals,
-            SavedAt           = DateTime.UtcNow.ToString("o")
+            SavedAt           = DateTime.UtcNow.ToString("o"),
+            PolicySchemaVersion = PolicySchemaVersion,
+            TrainingProfile   = profileName
         };
 
         File.WriteAllText(MetaPath,
@@ -541,6 +837,12 @@ public class SimulationRunner
         catch { return new ModelMeta(); }
     }
 }
+
+public record ModelResetResult(
+    bool HadModel,
+    bool Archived,
+    string? ArchiveDirectory,
+    IReadOnlyList<string> ProcessedFiles);
 
 // ── Internal data structures ──────────────────────────────────────────────────
 
@@ -567,4 +869,6 @@ internal class ModelMeta
     public int    EpisodesCompleted { get; set; } = 0;
     public int    BestMinerals      { get; set; } = 0;
     public string SavedAt           { get; set; } = "";
+    public int    PolicySchemaVersion { get; set; } = 0;
+    public string TrainingProfile   { get; set; } = "legacy";
 }
