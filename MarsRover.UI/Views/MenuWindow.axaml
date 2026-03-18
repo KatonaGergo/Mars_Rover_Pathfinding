@@ -342,24 +342,26 @@
                                Foreground="#FFF6AF76"
                                LetterSpacing="2"/>
 
-                    <StackPanel Margin="0,8,0,4" Spacing="6">
-                        <CheckBox x:Name="FullscreenModeCheckBox"
-                                  IsChecked="True"
-                                  Content="Fullscreen mode"
-                                  Foreground="#FFF2BB8D"
-                                  FontSize="14"
-                                  Checked="FullscreenMode_OnChanged"
-                                  Unchecked="FullscreenMode_OnChanged"/>
-                        <Grid ColumnDefinitions="*,*">
-                         <TextBlock  Grid.Column="0" Grid.Row="0"
-                                  x:Name="Music"
-                                 
-                                  Foreground="#FFF2BB8D"
-                                  FontSize="14"
-                                 />
-                      <Slider Grid.Column="1" Grid.Row="0"
-                                Minimum="0" Maximum="100" Value="50" Width="200" ValueChanged="VolumeChanged"  >   
-                             <Slider.Resources>
+
+                  <StackPanel Margin="0,8,0,4" Spacing="10">
+    <CheckBox x:Name="FullscreenModeCheckBox"
+              IsChecked="True"
+              Content="Fullscreen mode"
+              Foreground="#FFF2BB8D"
+              FontSize="14"
+              Checked="FullscreenMode_OnChanged"
+              Unchecked="FullscreenMode_OnChanged"/>
+
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBlock Text="Music Volume"
+                   Foreground="#FFF2BB8D"
+                   FontSize="14"
+                   VerticalAlignment="Center"
+                   Margin="35,0,15,0" /> <Slider Minimum="0" Maximum="100" Value="50" 
+                Width="200" 
+                VerticalAlignment="Center"
+                ValueChanged="VolumeChanged">
+            <Slider.Resources>
                                       <SolidColorBrush x:Key="SliderTrackFill">Gray</SolidColorBrush>
                                       <SolidColorBrush x:Key="SliderTrackFillPointerOver">Gray</SolidColorBrush>
                                       <SolidColorBrush x:Key="SliderTrackFillPressed">Gray</SolidColorBrush>
@@ -368,11 +370,12 @@
                                       <SolidColorBrush x:Key="SliderTrackValueFillPressed">#EF7E2A</SolidColorBrush>
                                       <SolidColorBrush x:Key="SliderThumbBackground">#EF7E2A</SolidColorBrush>
                                       <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver">#EF7E2A</SolidColorBrush>
-                                      <SolidColorBrush x:Key="SliderThumbBackgroundPressed">#EF7E2A</SolidColorBrush> 
-                            </Slider.Resources>
-                      </Slider>
-                            </Grid>
-                    </StackPanel>
+                             <SolidColorBrush x:Key="SliderThumbBackgroundPressed">#EF7E2A</SolidColorBrush> 
+                             </Slider.Resources>
+        </Slider>
+    </StackPanel>
+
+</StackPanel>
 
                     <Button Content="CLOSE" Classes="menuButton" Width="180" Height="46"
                             FontSize="22" HorizontalAlignment="Right"

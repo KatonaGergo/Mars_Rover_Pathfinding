@@ -17,6 +17,7 @@
           "LibVLCSharp.Avalonia": "3.8.5",
           "LiveChartsCore.SkiaSharpView.Avalonia": "2.0.0-rc2",
           "MarsRover.Core": "1.0.0",
+          "NetCoreAudio": "2.0.1",
           "VideoLAN.LibVLC.Windows": "3.0.20"
         },
         "runtime": {
@@ -374,6 +375,14 @@
       },
       "Microsoft.NETCore.Platforms/1.1.0": {},
       "Microsoft.NETCore.Targets/1.1.0": {},
+      "NetCoreAudio/2.0.1": {
+        "runtime": {
+          "lib/netstandard2.1/NetCoreAudio.dll": {
+            "assemblyVersion": "2.0.1.0",
+            "fileVersion": "2.0.1.0"
+          }
+        }
+      },
       "runtime.native.System/4.3.0": {
         "dependencies": {
           "Microsoft.NETCore.Platforms": "1.1.0",
@@ -798,6 +807,13 @@
       "sha512": "sha512-aOZA3BWfz9RXjpzt0sRJJMjAscAUm3Hoa4UWAfceV9UTYxgwZ1lZt5nO2myFf+/jetYQo4uTP7zS8sJY67BBxg==",
       "path": "microsoft.netcore.targets/1.1.0",
       "hashPath": "microsoft.netcore.targets.1.1.0.nupkg.sha512"
+    },
+    "NetCoreAudio/2.0.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-S9i/e+z9gzwXG0vY+qpF21bKEmmCE7LmqPtNM0grgE/P5vNHjUnpJdHwdb62wW/Ypa38RqqLErGkdRKxFfDGng==",
+      "path": "netcoreaudio/2.0.1",
+      "hashPath": "netcoreaudio.2.0.1.nupkg.sha512"
     },
     "runtime.native.System/4.3.0": {
       "type": "package",

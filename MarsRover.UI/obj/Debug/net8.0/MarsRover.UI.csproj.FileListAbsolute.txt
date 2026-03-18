@@ -4039,3 +4039,4 @@ C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.UI\obj\D
 C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.UI\obj\Debug\net8.0\MarsRove.6F9D8782.Up2Date
 C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.UI\obj\Debug\net8.0\MarsRover.UI.genruntimeconfig.cache
 C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.UI\obj\Debug\net8.0\ref\MarsRover.UI.dll
+C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.UI\bin\Debug\net8.0\NetCoreAudio.dll
