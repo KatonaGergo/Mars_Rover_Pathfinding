@@ -55,6 +55,13 @@ public partial class MenuWindow : Window
         Opened += OnOpened;
         Closed += OnClosed;
         SizeChanged += OnMenuSizeChanged;
+
+        // Feliratkozunk az eseményre, ami jelzi, ha vége a zenének
+        _musicPlayer.PlaybackFinished += (sender, e) =>
+        {
+            // Amint vége, újra elindítjuk
+            PlayMusic();
+        };
     }
 
     private void InitializeComponent()
@@ -100,6 +107,9 @@ public partial class MenuWindow : Window
         BuildHudArtifacts();
         InitializeVideo();
         StartHudEffects();
+        PlayMusic();
+
+
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -243,6 +253,16 @@ public partial class MenuWindow : Window
                 artifact.IsVisible = false;
         };
         _glitchTimer.Start();
+        // Ezt add hozzá a StartHudEffects() metódushoz vagy az OnOpened-hez
+        var musicLoopTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        musicLoopTimer.Tick += (s, e) =>
+        {
+            if (!_musicPlayer.Playing)
+            {
+                PlayMusic();
+            }
+        };
+        musicLoopTimer.Start();
     }
 
     private void BuildHudArtifacts()
@@ -476,20 +496,27 @@ public partial class MenuWindow : Window
         UpdateFrameCornerVisibility();
     }
     private readonly Player _musicPlayer = new Player();
-    private void PlayMusic(object? sender, RoutedEventArgs p)
+    private void PlayMusic()
     {
-        if (!_musicPlayer.Playing)
-        {
-            _musicPlayer.Play("");
+            if (!_musicPlayer.Playing)
+            {
+              
+
+               
+                    _musicPlayer.SetVolume(50); // Alap hangerõ
+                    _musicPlayer.Play("C:\\Users\\User\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.UI\\Assets\\BackgroundMusic.mp3");
+               
+            }
         }
-    }
-  
-    public void VolumeChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    public void VolumeChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
+        // Az 'e.NewValue' adja meg, hova húztad a csúszkát
         if (_musicPlayer != null)
         {
-            
             _musicPlayer.SetVolume((byte)e.NewValue);
         }
     }
+   
+
+
 }
