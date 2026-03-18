@@ -356,7 +356,6 @@
                                  
                                   Foreground="#FFF2BB8D"
                                   FontSize="14"
-                                  Onchange="PlayMusic"
                                  />
                       <Slider Grid.Column="1" Grid.Row="0"
                                 Minimum="0" Maximum="100" Value="50" Width="200" ValueChanged="VolumeChanged"  >   
