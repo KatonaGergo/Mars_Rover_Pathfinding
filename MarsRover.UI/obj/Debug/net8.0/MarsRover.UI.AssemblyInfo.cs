@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MarsRover.UI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ed10203223f1e2b32e5bfd4c1ad3c3151a620502")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b90d454e0cca552e8421c0be681ab8d6cef839d1")]
 [assembly: System.Reflection.AssemblyProductAttribute("MarsRover.UI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MarsRover.UI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
