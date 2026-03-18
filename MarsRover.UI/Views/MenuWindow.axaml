@@ -355,12 +355,14 @@
                                   FontSize="14"
                                   Checked="FullscreenMode_OnChanged"
                                   Unchecked="FullscreenMode_OnChanged"/>
-                        <CheckBox IsChecked="True" IsEnabled="False" Content="Live Mars video feed"
-                                  Foreground="#FFF2BB8D" FontSize="14"/>
-                        <CheckBox IsChecked="True" IsEnabled="False" Content="Scanline filter"
-                                  Foreground="#FFF2BB8D" FontSize="14"/>
-                        <CheckBox IsChecked="True" IsEnabled="False" Content="Telemetry glow"
-                                  Foreground="#FFF2BB8D" FontSize="14"/>
+                         <CheckBox x:Name="Music"
+                                  IsChecked="False"
+                                  Content="Music"
+                                  Foreground="#FFF2BB8D"
+                                  FontSize="14"
+                                  Checked="PlayMusic"
+                                  Unchecked="StopMusic"/>
+
                     </StackPanel>
 
                     <Button Content="CLOSE" Classes="menuButton" Width="180" Height="46"

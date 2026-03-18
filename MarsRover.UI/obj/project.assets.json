@@ -525,6 +525,15 @@
           "lib/netstandard1.0/_._": {}
         }
       },
+      "NetCoreAudio/2.0.1": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.1/NetCoreAudio.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard2.1/NetCoreAudio.dll": {}
+        }
+      },
       "runtime.native.System/4.3.0": {
         "type": "package",
         "dependencies": {
@@ -1745,6 +1754,21 @@
         "microsoft.netcore.targets.1.1.0.nupkg.sha512",
         "microsoft.netcore.targets.nuspec",
         "runtime.json"
+      ]
+    },
+    "NetCoreAudio/2.0.1": {
+      "sha512": "S9i/e+z9gzwXG0vY+qpF21bKEmmCE7LmqPtNM0grgE/P5vNHjUnpJdHwdb62wW/Ypa38RqqLErGkdRKxFfDGng==",
+      "type": "package",
+      "path": "netcoreaudio/2.0.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE",
+        "README.md",
+        "icon.jpg",
+        "lib/netstandard2.1/NetCoreAudio.dll",
+        "netcoreaudio.2.0.1.nupkg.sha512",
+        "netcoreaudio.nuspec"
       ]
     },
     "runtime.native.System/4.3.0": {
@@ -4081,27 +4105,28 @@
       "LibVLCSharp.Avalonia >= 3.8.5",
       "LiveChartsCore.SkiaSharpView.Avalonia >= 2.0.0-rc2",
       "MarsRover.Core >= 1.0.0",
+      "NetCoreAudio >= 2.0.1",
       "VideoLAN.LibVLC.Windows >= 3.0.20"
     ]
   },
   "packageFolders": {
-    "C:\\Users\\katona.gergo\\.nuget\\packages\\": {},
+    "C:\\Users\\gal.peter\\.nuget\\packages\\": {},
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\katona.gergo\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.UI\\MarsRover.UI.csproj",
+      "projectUniqueName": "C:\\Users\\gal.peter\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.UI\\MarsRover.UI.csproj",
       "projectName": "MarsRover.UI",
-      "projectPath": "C:\\Users\\katona.gergo\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.UI\\MarsRover.UI.csproj",
-      "packagesPath": "C:\\Users\\katona.gergo\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\katona.gergo\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.UI\\obj\\",
+      "projectPath": "C:\\Users\\gal.peter\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.UI\\MarsRover.UI.csproj",
+      "packagesPath": "C:\\Users\\gal.peter\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\gal.peter\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.UI\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
       ],
       "configFilePaths": [
-        "C:\\Users\\katona.gergo\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\gal.peter\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
@@ -4116,8 +4141,8 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "projectReferences": {
-            "C:\\Users\\katona.gergo\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj": {
-              "projectPath": "C:\\Users\\katona.gergo\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj"
+            "C:\\Users\\gal.peter\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj": {
+              "projectPath": "C:\\Users\\gal.peter\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj"
             }
           }
         }
@@ -4169,6 +4194,10 @@
           "LiveChartsCore.SkiaSharpView.Avalonia": {
             "target": "Package",
             "version": "[2.0.0-rc2, )"
+          },
+          "NetCoreAudio": {
+            "target": "Package",
+            "version": "[2.0.1, )"
           },
           "VideoLAN.LibVLC.Windows": {
             "target": "Package",

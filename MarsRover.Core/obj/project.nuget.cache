@@ -1,11 +1,11 @@
 {
   "version": 2,
-  "dgSpecHash": "/JLO7nPCxzU=",
+  "dgSpecHash": "mNSi8Fwq4Ws=",
   "success": true,
-  "projectFilePath": "C:\\Users\\katona.gergo\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj",
+  "projectFilePath": "C:\\Users\\gal.peter\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\katona.gergo\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.0\\microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
-    "C:\\Users\\katona.gergo\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\8.0.0\\microsoft.extensions.logging.abstractions.8.0.0.nupkg.sha512"
+    "C:\\Users\\gal.peter\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.0\\microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
+    "C:\\Users\\gal.peter\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\8.0.0\\microsoft.extensions.logging.abstractions.8.0.0.nupkg.sha512"
   ],
   "logs": []
 }

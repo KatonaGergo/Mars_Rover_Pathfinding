@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\katona.gergo\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj": {}
+    "C:\\Users\\gal.peter\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj": {}
   },
   "projects": {
-    "C:\\Users\\katona.gergo\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj": {
+    "C:\\Users\\gal.peter\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\katona.gergo\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj",
+        "projectUniqueName": "C:\\Users\\gal.peter\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj",
         "projectName": "MarsRover.Core",
-        "projectPath": "C:\\Users\\katona.gergo\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj",
-        "packagesPath": "C:\\Users\\katona.gergo\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\katona.gergo\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\obj\\",
+        "projectPath": "C:\\Users\\gal.peter\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\MarsRover.Core.csproj",
+        "packagesPath": "C:\\Users\\gal.peter\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\gal.peter\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.Core\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\katona.gergo\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\gal.peter\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
