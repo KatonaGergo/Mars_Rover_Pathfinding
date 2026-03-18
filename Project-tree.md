@@ -6,6 +6,7 @@ Mars_Rover_Pathfinding
 ├─ config.json
 ├─ Map
 │  ├─ mars_map_50x50.csv
+│  ├─ oraimunkapalya.csv
 │  ├─ test2.csv
 │  ├─ test3.csv
 │  └─ test_map-somewhatrandom.txt
@@ -25,7 +26,8 @@ Mars_Rover_Pathfinding
 │  │  ├─ PrioritizedReplayBuffer.cs
 │  │  ├─ QTable.cs
 │  │  ├─ RewardCalculator.cs
-│  │  └─ SimulationRunner.cs
+│  │  ├─ SimulationRunner.cs
+│  │  └─ TrainingContracts.cs
 │  ├─ Algorithm_Records
 │  │  ├─ DQNAgent.cs
 │  │  ├─ NeuralNetwork.cs
@@ -49,24 +51,33 @@ Mars_Rover_Pathfinding
 ├─ MarsRover.UI
 │  ├─ App.axaml
 │  ├─ App.axaml.cs
+│  ├─ app.manifest
 │  ├─ Assets
 │  │  ├─ arrow-left.png
 │  │  ├─ arrow-right.png
 │  │  ├─ avalonia-logo.ico
+│  │  ├─ logo.ico
 │  │  ├─ logo.png
+│  │  ├─ MarsBack.png
 │  │  ├─ MarsTheme.axaml
+│  │  ├─ MenuScreenLogo.png
 │  │  ├─ moon.png
+│  │  ├─ realativo.png
 │  │  └─ sun.png
 │  ├─ Controls
 │  │  └─ MapCanvas.cs
 │  ├─ MarsRover.UI.csproj
 │  ├─ MarsRover.UI.sln
 │  ├─ Program.cs
+│  ├─ UiDisplaySettings.cs
 │  ├─ ViewModels
 │  │  └─ MainViewModel.cs
 │  └─ Views
 │     ├─ MainWindow.axaml
-│     └─ MainWindow.axaml.cs
+│     ├─ MainWindow.axaml.cs
+│     ├─ MenuWindow.axaml
+│     └─ MenuWindow.axaml.cs
+├─ Project-tree.md
 ├─ Readme.txt
 └─ Theoretical-Maximum-Calculator.txt
 

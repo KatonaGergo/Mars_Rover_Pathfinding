@@ -25,6 +25,9 @@ public partial class MainViewModel : ObservableObject
         StepByStep
     }
 
+    private const int MinDurationHours = 24;
+    private const int MaxDurationHours = 720;
+
     // ── Simulation state ─────────────────────────────────────────────────────
     [ObservableProperty] private int    _durationHours   = 48;
     [ObservableProperty] private int    _trainingEpisodes = 1000;
@@ -64,6 +67,7 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Set by MainWindow to open the native file picker.</summary>
     public Func<Task<string?>>? PickFileAsync { get; set; }
+    public Func<Task>? BackToMenuAsync { get; set; }
 
     // ── Log & playback ───────────────────────────────────────────────────────
     private List<SimulationLogEntry> _log = new();
@@ -95,6 +99,12 @@ public partial class MainViewModel : ObservableObject
     partial void OnShowTrainingChartChanged(bool value) => OnPropertyChanged(nameof(ShowMapView));
     partial void OnShowGhostReplayChanged(bool value)   => OnPropertyChanged(nameof(ShowMapView));
     partial void OnGameMapChanged(GameMap? value)       => OnPropertyChanged(nameof(HasMapLoaded));
+    partial void OnDurationHoursChanged(int value)
+    {
+        int clamped = Math.Clamp(value, MinDurationHours, MaxDurationHours);
+        if (clamped != value)
+            DurationHours = clamped;
+    }
 
     // ── Simulation chart series (playback) ────────────────────────────────────
     public ISeries[] BatterySeries { get; }
@@ -130,6 +140,7 @@ public partial class MainViewModel : ObservableObject
     private double _fastReplayBatterySum;
     private TrainingChartSample? _fastReplayLastSample;
     private MarsRover.Core.Algorithm.EpisodeSnapshot? _fastPendingSnapshot;
+    private bool _isNavigatingAway;
 
     private readonly record struct TrainingChartSample(
         int Episode,
@@ -319,6 +330,9 @@ public partial class MainViewModel : ObservableObject
     {
         if (GameMap == null) return;
 
+        _isNavigatingAway = false;
+        int durationHours = EnsureValidDurationHours();
+
         IsTraining       = true;
         bool resuming    = File.Exists(SimulationRunner.ResolveModelPath(_modelPath) + ".qtable.json");
         TrainingStatus   = resuming
@@ -341,7 +355,7 @@ public partial class MainViewModel : ObservableObject
         ShowGhostReplay   = false;
         ShowTrainingChart = false;
 
-        var runner = new SimulationRunner(GameMap, DurationHours, _modelPath);
+        var runner = new SimulationRunner(GameMap, durationHours, _modelPath);
         HasSavedModel = runner.HasSavedModel;
 
         try
@@ -354,6 +368,8 @@ public partial class MainViewModel : ObservableObject
                     {
                         Dispatcher.UIThread.Post(() =>
                         {
+                            if (_isNavigatingAway) return;
+
                             if (!_userWantsToWatch)
                             {
                                 TrainingProgress = p.PercentDone;
@@ -375,6 +391,8 @@ public partial class MainViewModel : ObservableObject
 
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (_isNavigatingAway) return;
+
                     if (_trainingReplayMode == TrainingReplayMode.Fast)
                         FlushFastReplayBatch();
 
@@ -402,11 +420,11 @@ public partial class MainViewModel : ObservableObject
                     ShowTrainingChart = false;  // return to map for playback
                     HasSavedModel    = true;
 
-                    // Save run log to results/ — same output as Console project
+                    // Save run log to results/
                     string? logPath = null;
                     if (log.Count > 0 && GameMap != null)
                         logPath = MarsRover.Core.Utils.MissionLogger.Save(
-                            log, _mapPath, DurationHours, TrainingEpisodes, _modelPath, GameMap);
+                            log, _mapPath, durationHours, TrainingEpisodes, _modelPath, GameMap);
 
                     string completionStatus = $"✅ Training complete — " +
                                               $"{training.BestMinerals} peak minerals | " +
@@ -428,6 +446,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            if (_isNavigatingAway) return;
             IsTraining     = false;
             TrainingStatus = $"ERROR: {ex.GetType().Name}: {ex.Message}";
             if (ex.InnerException != null)
@@ -530,6 +549,23 @@ public partial class MainViewModel : ObservableObject
     }
 
     // ── Playback timer ────────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private async Task BackToMenu()
+    {
+        _isNavigatingAway = true;
+        _userWantsToWatch = false;
+        ShowWatchPrompt = false;
+        _pendingCompletionStatus = null;
+        _pendingResetDisplayToStart = false;
+
+        StopReplayProcesses(clearLog: true, clearTrainingQueues: true);
+        IsTraining = false;
+        TrainingProgress = 0;
+
+        if (BackToMenuAsync != null)
+            await BackToMenuAsync();
+    }
 
     private void OnPlaybackTick(object? sender, EventArgs e)
     {
@@ -803,6 +839,39 @@ public partial class MainViewModel : ObservableObject
     // ── Helpers ───────────────────────────────────────────────────────────────
 
 
+
+    private int EnsureValidDurationHours()
+    {
+        int clamped = Math.Clamp(DurationHours, MinDurationHours, MaxDurationHours);
+        if (clamped != DurationHours)
+            DurationHours = clamped;
+        return clamped;
+    }
+
+    private void StopReplayProcesses(bool clearLog, bool clearTrainingQueues)
+    {
+        _playbackTimer.Stop();
+        _ghostTimer.Stop();
+        _playbackIndex = 0;
+        IsRunning      = false;
+        IsPaused       = false;
+        IsGhostMode    = false;
+        ShowGhostReplay = false;
+
+        if (clearTrainingQueues)
+        {
+            _pendingGhostSnapshots.Clear();
+            _pendingTrainingChartSamples.Clear();
+            _fastPendingSnapshot = null;
+            ResetFastReplayBatch();
+        }
+
+        if (clearLog)
+        {
+            _log.Clear();
+            HasLog = false;
+        }
+    }
 
     private void ResetDisplayToStart(bool clearTrainingQueues = true)
     {

@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
@@ -13,7 +14,7 @@ public partial class MainWindow : Window
         Opened += (_, _) => UiDisplaySettings.ApplyTo(this);
 
         if (DataContext is MainViewModel vm)
-            vm.PickFileAsync = PickMapFileAsync;
+            BindViewModel(vm);
     }
 
     private void InitializeComponent()
@@ -23,8 +24,14 @@ public partial class MainWindow : Window
         DataContextChanged += (_, _) =>
         {
             if (DataContext is MainViewModel vm)
-                vm.PickFileAsync = PickMapFileAsync;
+                BindViewModel(vm);
         };
+    }
+
+    private void BindViewModel(MainViewModel vm)
+    {
+        vm.PickFileAsync = PickMapFileAsync;
+        vm.BackToMenuAsync = NavigateBackToMenuAsync;
     }
 
     /// <summary>
@@ -53,5 +60,18 @@ public partial class MainWindow : Window
 
         var files = await StorageProvider.OpenFilePickerAsync(options);
         return files.Count > 0 ? files[0].TryGetLocalPath() : null;
+    }
+
+    private Task NavigateBackToMenuAsync()
+    {
+        var menuWindow = new MenuWindow();
+        UiDisplaySettings.ApplyTo(menuWindow);
+
+        if (Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+            desktop.MainWindow = menuWindow;
+
+        menuWindow.Show();
+        Close();
+        return Task.CompletedTask;
     }
 }

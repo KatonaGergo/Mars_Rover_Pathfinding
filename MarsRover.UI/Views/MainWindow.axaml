@@ -46,6 +46,8 @@
                             <TextBlock Text="DURATION (h)" Classes="label"/>
                             <NumericUpDown Value="{Binding DurationHours}"
                                        Minimum="24" Maximum="720"
+                                       ClipValueToMinMax="True"
+                                       ParsingNumberStyle="Integer"
                                        Width="120" FontSize="13"/>
                         </StackPanel>
                         <StackPanel Orientation="Vertical" Spacing="2">
