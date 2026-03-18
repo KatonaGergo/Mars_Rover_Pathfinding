@@ -19,14 +19,21 @@ namespace MarsRover.UI.Views;
 public partial class MenuWindow : Window
 {
     private readonly Random _random = new();
+    private readonly Player _musicPlayer = new();
     private readonly List<Border> _signalSegments = new();
+    private readonly List<Border> _dustParticles = new();
+    private readonly List<Border> _glitchArtifacts = new();
     private int _signalLevel = 95;
     private int _activeSegments;
     private double _pulsePhase;
+    private byte _musicVolume = 50;
+    private bool _isClosing;
+    private string? _musicPath;
     private DispatcherTimer? _signalTimer;
     private DispatcherTimer? _pulseTimer;
     private DispatcherTimer? _glitchTimer;
     private DispatcherTimer? _dustTimer;
+    private DispatcherTimer? _musicLoopTimer;
 
     private Grid _videoHostLayer = null!;
     private Border _videoFallbackPanel = null!;
@@ -41,8 +48,6 @@ public partial class MenuWindow : Window
     private Border _settingsOverlay = null!;
     private CheckBox _fullscreenModeCheckBox = null!;
     private VideoView? _videoView;
-    private readonly List<Border> _dustParticles = new();
-    private readonly List<Border> _glitchArtifacts = new();
 
     private LibVLC? _libVlc;
     private MediaPlayer? _mediaPlayer;
@@ -56,12 +61,7 @@ public partial class MenuWindow : Window
         Closed += OnClosed;
         SizeChanged += OnMenuSizeChanged;
 
-        // Feliratkozunk az eseményre, ami jelzi, ha vége a zenének
-        _musicPlayer.PlaybackFinished += (sender, e) =>
-        {
-            // Amint vége, újra elindítjuk
-            PlayMusic();
-        };
+        _musicPlayer.PlaybackFinished += MusicPlayerOnPlaybackFinished;
     }
 
     private void InitializeComponent()
@@ -102,22 +102,24 @@ public partial class MenuWindow : Window
 
     private void OnOpened(object? sender, EventArgs e)
     {
+        _isClosing = false;
         UiDisplaySettings.ApplyTo(this);
         UpdateFrameCornerVisibility();
         BuildHudArtifacts();
         InitializeVideo();
         StartHudEffects();
         PlayMusic();
-
-
     }
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        _isClosing = true;
+
         _signalTimer?.Stop();
         _pulseTimer?.Stop();
         _glitchTimer?.Stop();
         _dustTimer?.Stop();
+        _musicLoopTimer?.Stop();
 
         if (_mediaPlayer is not null)
         {
@@ -138,6 +140,10 @@ public partial class MenuWindow : Window
             _videoHostLayer.Children.Clear();
             _videoView = null;
         }
+
+        _musicPlayer.PlaybackFinished -= MusicPlayerOnPlaybackFinished;
+        if (_musicPlayer.Playing)
+            _ = _musicPlayer.Stop();
     }
 
     private void InitializeVideo()
@@ -253,16 +259,17 @@ public partial class MenuWindow : Window
                 artifact.IsVisible = false;
         };
         _glitchTimer.Start();
-        // Ezt add hozzá a StartHudEffects() metódushoz vagy az OnOpened-hez
-        var musicLoopTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-        musicLoopTimer.Tick += (s, e) =>
+
+        _musicLoopTimer?.Stop();
+        _musicLoopTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _musicLoopTimer.Tick += (_, _) =>
         {
-            if (!_musicPlayer.Playing)
+            if (!_isClosing && !_musicPlayer.Playing)
             {
                 PlayMusic();
             }
         };
-        musicLoopTimer.Start();
+        _musicLoopTimer.Start();
     }
 
     private void BuildHudArtifacts()
@@ -495,28 +502,54 @@ public partial class MenuWindow : Window
         UiDisplaySettings.ApplyTo(this);
         UpdateFrameCornerVisibility();
     }
-    private readonly Player _musicPlayer = new Player();
+
+    private void MusicPlayerOnPlaybackFinished(object? sender, EventArgs e)
+    {
+        if (!_isClosing)
+            PlayMusic();
+    }
+
     private void PlayMusic()
     {
-            if (!_musicPlayer.Playing)
-            {
-              
+        if (_isClosing || _musicPlayer.Playing)
+            return;
 
-               
-                    _musicPlayer.SetVolume(50); // Alap hangerõ
-                    _musicPlayer.Play("C:\\Users\\User\\Documents\\GitHub\\Mars_Rover_Pathfinding\\MarsRover.UI\\Assets\\BackgroundMusic.mp3");
-               
-            }
+        _musicPath ??= ResolveMusicPath();
+        if (string.IsNullOrWhiteSpace(_musicPath))
+            return;
+
+        _musicPlayer.SetVolume(_musicVolume);
+        _ = _musicPlayer.Play(_musicPath);
+    }
+
+    private static string? ResolveMusicPath()
+    {
+        var candidates = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "Assets", "BackgroundMusic.mp3"),
+            Path.Combine(AppContext.BaseDirectory, "BackgroundMusic.mp3"),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Assets", "BackgroundMusic.mp3"))
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (File.Exists(candidate))
+                return candidate;
         }
+
+        return null;
+    }
+
     public void VolumeChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
-        // Az 'e.NewValue' adja meg, hova húztad a csúszkát
-        if (_musicPlayer != null)
+        _musicVolume = (byte)Math.Clamp(e.NewValue, 0, 100);
+        if (!_isClosing)
         {
-            _musicPlayer.SetVolume((byte)e.NewValue);
+            _musicPlayer.SetVolume(_musicVolume);
         }
     }
    
 
 
 }
+

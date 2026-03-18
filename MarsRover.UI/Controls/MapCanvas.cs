@@ -46,16 +46,15 @@ public class MapCanvas : Control
     public bool              IsGhostMode{ get => GetValue(IsGhostModeProperty);set => SetValue(IsGhostModeProperty, value); }
 
     // ── Tile brushes ──────────────────────────────────────────────────────────
-    private static readonly IBrush SurfaceBrush  = new SolidColorBrush(Color.Parse("#1A0C0A"));
-    private static readonly IBrush ObstacleBrush = new SolidColorBrush(Color.Parse("#3D3D47"));
-    private static readonly IBrush MineralBBrush = new SolidColorBrush(Color.Parse("#1E5FCC"));
-    private static readonly IBrush MineralYBrush = new SolidColorBrush(Color.Parse("#CCA800"));
-    private static readonly IBrush MineralGBrush = new SolidColorBrush(Color.Parse("#1E8A3C"));
-    private static readonly IBrush StartBrush    = new SolidColorBrush(Color.Parse("#3D2010"));
-    private static readonly IBrush RoverBrush    = new SolidColorBrush(Color.Parse("#FF6B35"));
+    private static readonly IBrush ObstacleBrush = new SolidColorBrush(Color.FromArgb(190, 65, 72, 88));
+    private static readonly IBrush MineralBBrush = new SolidColorBrush(Color.FromArgb(220, 43, 127, 255));
+    private static readonly IBrush MineralYBrush = new SolidColorBrush(Color.FromArgb(220, 255, 201, 35));
+    private static readonly IBrush MineralGBrush = new SolidColorBrush(Color.FromArgb(220, 58, 203, 104));
+    private static readonly IBrush StartBrush    = new SolidColorBrush(Color.FromArgb(150, 255, 130, 70));
+    private static readonly IBrush RoverBrush    = new SolidColorBrush(Color.FromArgb(235, 255, 107, 53));
     private static readonly IBrush NightOverlay  = new SolidColorBrush(Color.FromArgb(90, 0, 5, 20));
-    private static readonly IBrush GridBrush     = new SolidColorBrush(Color.FromArgb(15, 255, 255, 255));
-    private static readonly Pen    GridPen        = new Pen(GridBrush, 0.5);
+    private static readonly IBrush GridBrush     = new SolidColorBrush(Color.FromArgb(52, 255, 240, 224));
+    private static readonly Pen    GridPen       = new Pen(GridBrush, 0.6);
 
     // Ghost trail brushes — indexed by StepEvent
     private static readonly Color TrailMove           = Color.FromArgb(120, 255, 140, 60);   // orange
@@ -90,8 +89,13 @@ public class MapCanvas : Control
         // ── 1. Tiles ──────────────────────────────────────────────────────────
         for (int y = 0; y < GameMap_.Height; y++)
             for (int x = 0; x < GameMap_.Width; x++)
-                ctx.FillRectangle(TileBrush(map, x, y),
-                                  new Rect(x * cellW, y * cellH, cellW, cellH));
+            {
+                var tileBrush = TileBrush(map, x, y);
+                if (tileBrush is not null)
+                {
+                    ctx.FillRectangle(tileBrush, new Rect(x * cellW, y * cellH, cellW, cellH));
+                }
+            }
 
         // ── 2. Grid lines ─────────────────────────────────────────────────────
         for (int y = 0; y <= GameMap_.Height; y++)
@@ -219,17 +223,17 @@ public class MapCanvas : Control
         _                          => TrailMove
     };
 
-    private static IBrush TileBrush(GameMap map, int x, int y)
+    private static IBrush? TileBrush(GameMap map, int x, int y)
     {
         bool hasMineral = map.HasMineral(x, y);
         return map.GetTile(x, y) switch
         {
             TileType.Obstacle => ObstacleBrush,
             TileType.Start    => StartBrush,
-            TileType.MineralB => hasMineral ? MineralBBrush : SurfaceBrush,
-            TileType.MineralY => hasMineral ? MineralYBrush : SurfaceBrush,
-            TileType.MineralG => hasMineral ? MineralGBrush : SurfaceBrush,
-            _                  => SurfaceBrush
+            TileType.MineralB => hasMineral ? MineralBBrush : null,
+            TileType.MineralY => hasMineral ? MineralYBrush : null,
+            TileType.MineralG => hasMineral ? MineralGBrush : null,
+            _                  => null
         };
     }
 

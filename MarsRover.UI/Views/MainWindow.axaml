@@ -184,17 +184,24 @@
                             </StackPanel>
                         </Border>
                         <!-- Map canvas -->
-                    <Grid Grid.Row="1" IsVisible="{Binding HasMapLoaded}">
-                        <Image Source="avares://MarsRover.UI/Assets/MarsSurface.png"
-                          Stretch="UniformToFill"
-                          Opacity="0.2"/>
-
-                        <controls:MapCanvas
-                            IsVisible="{Binding HasMapLoaded}"
-                            GameMap="{Binding GameMap}"
-                            RoverX="{Binding RoverX}"
-                            RoverY="{Binding RoverY}"
-                            IsNight="{Binding IsNight}"/>
+                        <Grid Grid.Row="1" IsVisible="{Binding HasMapLoaded}" ClipToBounds="True">
+                            <Image Source="avares://MarsRover.UI/Assets/MarsSurface.png"
+                                   Stretch="UniformToFill"
+                                   Opacity="0.54"/>
+                            <Border IsHitTestVisible="False" Opacity="0.32">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Offset="0" Color="#5A1E1009"/>
+                                        <GradientStop Offset="1" Color="#A1160B06"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <controls:MapCanvas
+                                IsVisible="{Binding HasMapLoaded}"
+                                GameMap="{Binding GameMap}"
+                                RoverX="{Binding RoverX}"
+                                RoverY="{Binding RoverY}"
+                                IsNight="{Binding IsNight}"/>
                         </Grid>
                     </Panel>
                 </Grid>
@@ -217,14 +224,27 @@
                         </Grid>
                     </Border>
                     <!-- Map -->
-                    <controls:MapCanvas Grid.Row="1"
-                                        GameMap="{Binding GameMap}"
-                                        RoverX="{Binding RoverX}"
-                                        RoverY="{Binding RoverY}"
-                                        IsNight="False"
-                                        GhostTrail="{Binding GhostTrail}"
-                                        GhostIndex="{Binding GhostIndex}"
-                                        IsGhostMode="True"/>
+                    <Grid Grid.Row="1" ClipToBounds="True">
+                        <Image Source="avares://MarsRover.UI/Assets/MarsSurface.png"
+                               Stretch="UniformToFill"
+                               Opacity="0.54"/>
+                        <Border IsHitTestVisible="False" Opacity="0.32">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Offset="0" Color="#5A1E1009"/>
+                                    <GradientStop Offset="1" Color="#A1160B06"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                        <controls:MapCanvas
+                            GameMap="{Binding GameMap}"
+                            RoverX="{Binding RoverX}"
+                            RoverY="{Binding RoverY}"
+                            IsNight="False"
+                            GhostTrail="{Binding GhostTrail}"
+                            GhostIndex="{Binding GhostIndex}"
+                            IsGhostMode="True"/>
+                    </Grid>
                     <!-- Live event log with reward/punishment -->
                     <Border Grid.Row="2" Background="#050507" CornerRadius="4"
                             Padding="6,4" Margin="0,4,0,0" Height="105">
