@@ -63,8 +63,24 @@
                             VerticalAlignment="Center"/>
                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <TextBlock Text="SPEED" Classes="label" VerticalAlignment="Center"/>
-                            <Slider Value="{Binding PlaybackSpeed}"
-                                Minimum="1" Maximum="20" Width="120" VerticalAlignment="Center"/>
+                      <Slider Value="{Binding PlaybackSpeed}"
+                                Minimum="1" Maximum="20" Width="120" VerticalAlignment="Center" >   
+                             <Slider.Resources>
+    <SolidColorBrush x:Key="SliderTrackFill">Gray</SolidColorBrush>
+    <SolidColorBrush x:Key="SliderTrackFillPointerOver">Gray</SolidColorBrush>
+    <SolidColorBrush x:Key="SliderTrackFillPressed">Gray</SolidColorBrush>
+
+    <SolidColorBrush x:Key="SliderTrackValueFill">#EF7E2A</SolidColorBrush>
+    <SolidColorBrush x:Key="SliderTrackValueFillPointerOver">#EF7E2A</SolidColorBrush>
+    <SolidColorBrush x:Key="SliderTrackValueFillPressed">#EF7E2A</SolidColorBrush>
+
+    <SolidColorBrush x:Key="SliderThumbBackground">#EF7E2A</SolidColorBrush>
+    <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver">#EF7E2A</SolidColorBrush>
+    <SolidColorBrush x:Key="SliderThumbBackgroundPressed">#EF7E2A</SolidColorBrush> 
+  </Slider.Resources>
+                      </Slider>
+                                
+                                
                         </StackPanel>
                         <Button Content="REPLAY" Classes="secondary"
                             Command="{Binding ShowGhostCommand}"
@@ -83,6 +99,7 @@
                             VerticalAlignment="Center"/>
                         <Button Content="⏭ STEP" Classes="secondary" Command="{Binding StepForwardCommand}"
                             IsEnabled="{Binding HasLog}" VerticalAlignment="Center"/>
+                         <Button Content="Back to Main Menu" Classes="secondary" Command="{Binding StepForwardCommand}" HorizontalAlignment="Right"/>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
