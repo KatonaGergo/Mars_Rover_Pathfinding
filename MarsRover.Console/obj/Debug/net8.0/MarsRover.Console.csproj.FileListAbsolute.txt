@@ -39,3 +39,24 @@ C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Console\obj\
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\MarsRover.Console.pdb
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\MarsRover.Console.genruntimeconfig.cache
 C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\ref\MarsRover.Console.dll
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\bin\Debug\net8.0\MarsRover.Console.exe
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\bin\Debug\net8.0\MarsRover.Console.deps.json
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\bin\Debug\net8.0\MarsRover.Console.runtimeconfig.json
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\bin\Debug\net8.0\MarsRover.Console.dll
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\bin\Debug\net8.0\MarsRover.Console.pdb
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\bin\Debug\net8.0\Microsoft.Extensions.DependencyInjection.Abstractions.dll
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\bin\Debug\net8.0\Microsoft.Extensions.Logging.Abstractions.dll
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\bin\Debug\net8.0\MarsRover.Core.dll
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\bin\Debug\net8.0\MarsRover.Core.pdb
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\MarsRover.Console.csproj.AssemblyReference.cache
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\MarsRover.Console.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\MarsRover.Console.AssemblyInfoInputs.cache
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\MarsRover.Console.AssemblyInfo.cs
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\MarsRover.Console.csproj.CoreCompileInputs.cache
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\MarsRover.Console.sourcelink.json
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\MarsRove.309F356A.Up2Date
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\MarsRover.Console.dll
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\refint\MarsRover.Console.dll
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\MarsRover.Console.pdb
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\MarsRover.Console.genruntimeconfig.cache
+C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Console\obj\Debug\net8.0\ref\MarsRover.Console.dll
