@@ -26,7 +26,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     private const int MinDurationHours = 24;
-    private const int MaxDurationHours = 720;
+    private const int MaxDurationHours = 10000;
 
     // ── Simulation state ─────────────────────────────────────────────────────
     [ObservableProperty] private double? _durationHours  = 48;

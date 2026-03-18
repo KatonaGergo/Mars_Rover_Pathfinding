@@ -213,7 +213,7 @@
                             </Grid>
                         </Border>
 
-                        <TextBlock Text="Autonomous Exploration System"
+                        <TextBlock Text="Q-Learning Pathfinding Agent"
                                    HorizontalAlignment="Center"
                                    Foreground="#FFE0B487"
                                    FontFamily="Consolas, Cascadia Mono"
