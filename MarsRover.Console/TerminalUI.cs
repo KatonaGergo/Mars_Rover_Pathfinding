@@ -354,7 +354,7 @@ public static class TerminalUI
 
         // Title block
         WA(R_Title,     0, Center("──  ·  M A R S   R O V E R  ·  ──"),  ConsoleColor.Red);
-        WA(R_Title + 1, 0, Center("AUTONOMOUS EXPLORATION SYSTEM"),        ConsoleColor.DarkRed);
+        WA(R_Title + 1, 0, Center("Q-Learning Pathfinding Agent"),        ConsoleColor.DarkRed);
         WA(R_Title + 2, 0, Center("MISSION CONTROL  ·  SYS-7  v2.4"),     ConsoleColor.DarkRed);
 
         // Bottom separator
