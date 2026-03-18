@@ -513,7 +513,9 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            GameMap  = MarsRover.Core.Simulation.GameMap.LoadFromFile(path);
+            var loadedMap = MarsRover.Core.Simulation.GameMap.LoadFromFile(path);
+            StopReplayProcesses(clearLog: true, clearTrainingQueues: true);
+            GameMap  = loadedMap;
             _mapPath = path;
             RoverX  = GameMap.StartX;
             RoverY  = GameMap.StartY;
