@@ -130,7 +130,11 @@ public class SimulationRunner
         {
             int mapSeed = curriculum.RandomMapSeedStart + i;
             var map = BuildGeneratedMap(mapSeed);
-            var runner = new SimulationRunner(map, _durationHours, $"{_modelPath}_curriculum_{mapSeed}");
+            string tempModelPath = $"{_modelPath}_curriculum_{mapSeed}";
+            // Defensive cleanup: do not reuse stale temp checkpoints from prior runs.
+            ResetSavedModel(tempModelPath, archive: false);
+
+            var runner = new SimulationRunner(map, _durationHours, tempModelPath);
             var pretrainOptions = options with
             {
                 Curriculum = new CurriculumOptions(false),
@@ -144,6 +148,9 @@ public class SimulationRunner
                 options: pretrainOptions,
                 warmStartTable: warmStart,
                 persistModel: false).bestTable;
+
+            // Cleanup any accidental artifacts from temp pretraining path.
+            ResetSavedModel(tempModelPath, archive: false);
         }
 
         // Explicit held-out validation pass before fine-tuning on official map.
@@ -332,16 +339,17 @@ public class SimulationRunner
         bool persistModel = true)
     {
         // ── Load or create Q-table ────────────────────────────────────────────
-        // The Q-table values (the actual learned knowledge) are loaded from disk.
-        // Epsilon is NOT restored from the saved meta — a resumed run should
-        // re-explore at a moderate rate so it can improve on the existing table.
-        // Restoring the saved epsilon (typically 0.05 after a converged run)
-        // produces epsilonDecay = 1.0 for the entire run — the agent barely
-        // explores and the Q-table barely changes, making the resume pointless.
-        ValidateSavedModelCompatibility();
-        var sharedTable  = warmStartTable
-                         ?? (HasSavedModel ? QTable.Load(QTablePath) : new QTable());
-        double startEpsilon = HasSavedModel ? 0.4 : 1.0;
+        // Disk resume is opt-in via TrainingOptions.ResumeSavedModel so UI/CLI
+        // can enforce explicit user intent before reusing stale checkpoints.
+        bool resumeFromDisk = options.ResumeSavedModel
+                              && warmStartTable == null
+                              && HasSavedModel;
+        if (resumeFromDisk)
+            ValidateSavedModelCompatibility();
+
+        var sharedTable = warmStartTable
+                          ?? (resumeFromDisk ? QTable.Load(QTablePath) : new QTable());
+        double startEpsilon = (warmStartTable != null || resumeFromDisk) ? 0.4 : 1.0;
         // Fresh run: 1.0 → 0.05 over N episodes (full exploration → convergence)
         // Resume:    0.4 → 0.05 over N episodes (re-explore without throwing away knowledge)
 

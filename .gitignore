@@ -5,3 +5,5 @@ results/
 Saved_Models/
 _temp_build/
 .vscode/
+.cursor/
+.dotnet/

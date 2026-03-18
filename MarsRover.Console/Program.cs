@@ -35,6 +35,24 @@ if (!config.ApplyArgs(args, out string argError))
     return 1;
 }
 
+bool wantsInfo = Array.Exists(args, a => a == "--info");
+bool wantsVerify = Array.Exists(args, a => a == "--verify");
+bool wantsBenchmark = Array.Exists(args, a => a == "--benchmark");
+bool wantsResetModel = Array.Exists(args, a => a == "--reset-model");
+bool resetDelete = Array.Exists(args, a => a == "--reset-model-delete");
+
+if (wantsResetModel)
+{
+    PrintResetModelResult(config.ModelPath, archive: !resetDelete);
+}
+
+// ── --info mode ───────────────────────────────────────────────────────────────
+if (wantsInfo)
+{
+    ConsoleRunner.PrintModelInfo(config.ModelPath);
+    return 0;
+}
+
 if (!config.Validate(out string validationError))
 {
     Console.ForegroundColor = ConsoleColor.Red;
@@ -43,16 +61,7 @@ if (!config.Validate(out string validationError))
     return 1;
 }
 
-// ── --info mode ───────────────────────────────────────────────────────────────
-bool wantsInfo = Array.Exists(args, a => a == "--info");
-if (wantsInfo)
-{
-    ConsoleRunner.PrintModelInfo(config.ModelPath);
-    return 0;
-}
-
 // ── --verify mode ────────────────────────────────────────────────────────────
-bool wantsVerify = Array.Exists(args, a => a == "--verify");
 if (wantsVerify)
 {
     if (!TryReadIntArg(args, "--verify-timeout", 300, min: 1, max: 86_400, out int timeoutSec, out string timeoutErr))
@@ -117,6 +126,11 @@ if (wantsVerify)
         transpositionCap);
 }
 
+if (wantsBenchmark)
+{
+    return RunBenchmark(config, args);
+}
+
 // ── Boot screen ───────────────────────────────────────────────────────────────
 TerminalUI.RunLoadingScreen();
 
@@ -147,8 +161,24 @@ while (true)
 
 // ── Mission run ───────────────────────────────────────────────────────────────
 var runner = new ConsoleRunner(config);
-runner.Run();
-return 0;
+try
+{
+    runner.Run();
+    return 0;
+}
+catch (InvalidOperationException ex) when (IsSchemaMismatchError(ex))
+{
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine();
+    Console.WriteLine("ERROR: Saved model is incompatible with current policy schema.");
+    Console.WriteLine(ex.Message);
+    Console.WriteLine();
+    Console.WriteLine("Recovery:");
+    Console.WriteLine($"  dotnet run --project MarsRover.Console -- --model {config.ModelPath} --reset-model");
+    Console.WriteLine("Then run training again.");
+    Console.ResetColor();
+    return 2;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 static void PrintUsage()
@@ -162,7 +192,14 @@ static void PrintUsage()
     Console.WriteLine("    --hours    <int>     Mission duration in hours  (default: 24)");
     Console.WriteLine("    --episodes <int>     Training episode count     (default: 500)");
     Console.WriteLine("    --model    <name>    Model file base name       (default: model)");
+    Console.WriteLine("    --reset-model        Archive/delete current model files before continuing");
+    Console.WriteLine("    --reset-model-delete Delete model files directly instead of archiving");
     Console.WriteLine("    --info               Print saved model info and exit");
+    Console.WriteLine("    --benchmark          Run deterministic benchmark and save JSON/CSV to results/");
+    Console.WriteLine("    --benchmark-preset <48h|100h>  Official benchmark preset");
+    Console.WriteLine("    --benchmark-seeds <a,b,c>      Fixed seed list (default preset seeds)");
+    Console.WriteLine("    --benchmark-episodes <int>     Episodes per benchmark seed");
+    Console.WriteLine("    --benchmark-output <name>      Output base name (without extension)");
     Console.WriteLine("    --verify             Run exact branch-and-bound verifier");
     Console.WriteLine("    --verify-timeout <s> Verifier timeout in seconds (default: 300)");
     Console.WriteLine("    --verify-lb <int>    Initial lower bound to speed pruning (default: 0)");
@@ -673,4 +710,235 @@ static bool TryReadOptionalIntArg(
 
     value = parsed;
     return true;
+}
+
+static int RunBenchmark(AppConfig config, string[] args)
+{
+    string? preset = GetArg(args, "--benchmark-preset");
+    int hours = config.Hours;
+    string presetLabel = $"{hours}h";
+    int[] seeds = [101, 202, 303];
+
+    if (!string.IsNullOrWhiteSpace(preset))
+    {
+        switch (preset.Trim().ToLowerInvariant())
+        {
+            case "48h":
+                hours = 48;
+                presetLabel = "official48h";
+                seeds = [4_801, 4_802, 4_803];
+                break;
+            case "100h":
+                hours = 100;
+                presetLabel = "official100h";
+                seeds = [10_001, 10_002, 10_003];
+                break;
+            default:
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"ERROR: Unsupported --benchmark-preset '{preset}'. Use 48h or 100h.");
+                Console.ResetColor();
+                return 1;
+        }
+    }
+
+    if (!TryReadIntArg(
+            args,
+            "--benchmark-episodes",
+            config.Episodes,
+            min: 1,
+            max: 100_000,
+            out int episodes,
+            out string episodesErr))
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"ERROR: {episodesErr}");
+        Console.ResetColor();
+        return 1;
+    }
+
+    string? seedArg = GetArg(args, "--benchmark-seeds");
+    if (!string.IsNullOrWhiteSpace(seedArg)
+        && !TryParseSeedList(seedArg, out seeds, out string seedErr))
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"ERROR: {seedErr}");
+        Console.ResetColor();
+        return 1;
+    }
+
+    string outputBase = GetArg(args, "--benchmark-output")
+        ?? $"benchmark-{presetLabel}-{DateTime.Now:yyyyMMdd_HHmmss}";
+
+    GameMap map;
+    try
+    {
+        map = GameMap.LoadFromFile(config.MapPath);
+    }
+    catch (Exception ex)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"ERROR: Could not load map: {ex.Message}");
+        Console.ResetColor();
+        return 1;
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("MARS ROVER DETERMINISTIC BENCHMARK");
+    Console.WriteLine($"Map         : {config.MapPath}");
+    Console.WriteLine($"Duration    : {hours}h");
+    Console.WriteLine($"Episodes    : {episodes}");
+    Console.WriteLine($"Seeds       : {string.Join(", ", seeds)}");
+    Console.WriteLine($"Output base : results/{outputBase}.[json|csv]");
+    Console.WriteLine();
+
+    var perRun = new List<BenchmarkRunResult>(seeds.Length);
+
+    foreach (int seed in seeds)
+    {
+        string benchModelPath = $"{config.ModelPath}_bench_{hours}h_seed{seed}";
+        SimulationRunner.ResetSavedModel(benchModelPath, archive: false);
+
+        var runner = new SimulationRunner(map.Clone(), hours, benchModelPath);
+        var options = TrainingProfileFactory.CreateOptions(TrainingProfileFactory.DefaultProfile) with
+        {
+            EpisodeSeedOffset = seed * 10_000,
+            ProfileName = $"BenchmarkSeed{seed}",
+            Curriculum = new CurriculumOptions(false),
+            SeedSweep = new SeedSweepOptions(false)
+        };
+
+        try
+        {
+            var (_, log) = runner.TrainAndRun(
+                episodes,
+                onProgress: null,
+                options: options);
+
+            if (log.Count == 0)
+            {
+                perRun.Add(new BenchmarkRunResult(
+                    Seed: seed,
+                    Minerals: 0,
+                    ReturnedHome: false,
+                    TicksUsed: 0,
+                    BatteryAtEnd: 0.0));
+                Console.WriteLine($"seed {seed}: no log entries");
+            }
+            else
+            {
+                var final = log[^1];
+                bool returnedHome = final.X == map.StartX && final.Y == map.StartY;
+                perRun.Add(new BenchmarkRunResult(
+                    Seed: seed,
+                    Minerals: final.TotalMinerals,
+                    ReturnedHome: returnedHome,
+                    TicksUsed: final.Tick,
+                    BatteryAtEnd: final.Battery));
+
+                Console.WriteLine(
+                    $"seed {seed}: minerals={final.TotalMinerals} " +
+                    $"returnedHome={(returnedHome ? "yes" : "no")} " +
+                    $"ticks={final.Tick} batteryEnd={final.Battery:F1}%");
+            }
+        }
+        catch (InvalidOperationException ex) when (IsSchemaMismatchError(ex))
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"seed {seed}: schema mismatch: {ex.Message}");
+            Console.ResetColor();
+            return 2;
+        }
+        finally
+        {
+            SimulationRunner.ResetSavedModel(benchModelPath, archive: false);
+        }
+    }
+
+    var summary = Benchmarking.BuildSummary(
+        mapPath: config.MapPath,
+        hours: hours,
+        episodes: episodes,
+        modelPath: config.ModelPath,
+        seeds: seeds,
+        runs: perRun);
+
+    var (jsonPath, csvPath) = Benchmarking.SaveSummary(summary, outputBase);
+
+    Console.WriteLine();
+    Console.WriteLine("BENCHMARK SUMMARY");
+    Console.WriteLine($"minerals mean/median/std : {summary.MineralsMean:F2} / {summary.MineralsMedian:F2} / {summary.MineralsStd:F2}");
+    Console.WriteLine($"return-home rate         : {summary.ReturnHomeRate:P1}");
+    Console.WriteLine($"ticks-used median        : {summary.TicksUsedMedian:F2}");
+    Console.WriteLine($"battery-end median       : {summary.BatteryAtEndMedian:F2}%");
+    Console.WriteLine($"saved JSON               : {jsonPath}");
+    Console.WriteLine($"saved CSV                : {csvPath}");
+    Console.WriteLine();
+
+    return 0;
+}
+
+static bool TryParseSeedList(string raw, out int[] seeds, out string error)
+{
+    error = string.Empty;
+    seeds = Array.Empty<int>();
+
+    var parts = raw.Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries);
+    if (parts.Length == 0)
+    {
+        error = "--benchmark-seeds requires at least one integer seed.";
+        return false;
+    }
+
+    var parsed = new List<int>(parts.Length);
+    foreach (string part in parts)
+    {
+        if (!int.TryParse(part.Trim(), out int seed))
+        {
+            error = $"Invalid seed '{part}' in --benchmark-seeds.";
+            return false;
+        }
+        parsed.Add(seed);
+    }
+
+    seeds = parsed.Distinct().ToArray();
+    return true;
+}
+
+static string? GetArg(string[] args, string flag)
+{
+    int i = Array.IndexOf(args, flag);
+    if (i < 0 || i + 1 >= args.Length) return null;
+    return args[i + 1];
+}
+
+static bool IsSchemaMismatchError(InvalidOperationException ex)
+    => ex.Message.Contains("schema mismatch", StringComparison.OrdinalIgnoreCase)
+       || ex.Message.Contains("Retraining is required", StringComparison.OrdinalIgnoreCase);
+
+static void PrintResetModelResult(string modelPath, bool archive)
+{
+    var result = SimulationRunner.ResetSavedModel(modelPath, archive);
+
+    Console.WriteLine();
+    Console.WriteLine("MODEL RESET");
+    if (!result.HadModel)
+    {
+        Console.WriteLine($"No saved model found at {SimulationRunner.ResolveModelPath(modelPath)}.qtable.json");
+        Console.WriteLine();
+        return;
+    }
+
+    if (result.Archived)
+    {
+        Console.WriteLine("Saved model archived.");
+        Console.WriteLine($"Archive directory: {result.ArchiveDirectory}");
+    }
+    else
+    {
+        Console.WriteLine("Saved model deleted.");
+    }
+
+    foreach (string file in result.ProcessedFiles)
+        Console.WriteLine($"  - {file}");
+    Console.WriteLine();
 }

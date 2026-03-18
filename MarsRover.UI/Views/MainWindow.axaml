@@ -15,6 +15,28 @@
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
+        <Style Selector="ScrollViewer.navbar-scroll ScrollBar:horizontal">
+            <Setter Property="Height" Value="10"/>
+            <Setter Property="MinHeight" Value="10"/>
+            <Setter Property="MaxHeight" Value="10"/>
+            <Setter Property="Background" Value="#22140A"/>
+        </Style>
+        <Style Selector="ScrollViewer.navbar-scroll ScrollBar:horizontal:pointerover">
+            <Setter Property="Height" Value="10"/>
+            <Setter Property="MinHeight" Value="10"/>
+            <Setter Property="MaxHeight" Value="10"/>
+        </Style>
+        <Style Selector="ScrollViewer.navbar-scroll ScrollBar:horizontal Thumb">
+            <Setter Property="Background" Value="#EF7E2A"/>
+            <Setter Property="MinHeight" Value="10"/>
+            <Setter Property="MaxHeight" Value="10"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+        <Style Selector="ScrollViewer.navbar-scroll ScrollBar:horizontal Thumb:pointerover">
+            <Setter Property="Background" Value="#EF7E2A"/>
+            <Setter Property="MinHeight" Value="10"/>
+            <Setter Property="MaxHeight" Value="10"/>
+        </Style>
     </Window.Styles>
     <Grid ColumnDefinitions="3.4*,1.4*" RowDefinitions="Auto, *" Margin="10">
         <!-- ═══════════════════════════════════════════════
@@ -39,7 +61,8 @@
                               HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Disabled"
                               HorizontalAlignment="Stretch"
-                              Margin="10,0,0,0">
+                              Margin="10,0,0,0"
+                              Classes="navbar-scroll">
                     <StackPanel Orientation="Horizontal"
                             HorizontalAlignment="Left" Spacing="12" VerticalAlignment="Center">
                         <StackPanel Orientation="Vertical" Spacing="2">
@@ -62,6 +85,12 @@
                             VerticalAlignment="Center"/>
                         <Button Content="LOAD MAP" Classes="secondary"
                             Command="{Binding LoadMapCommand}"
+                            VerticalAlignment="Center"/>
+                        <Button Content="LOAD MODEL" Classes="secondary"
+                            Command="{Binding LoadModelCommand}"
+                            VerticalAlignment="Center"/>
+                        <Button Content="RESET MODEL" Classes="secondary"
+                            Command="{Binding ResetModelCommand}"
                             VerticalAlignment="Center"/>
                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <TextBlock Text="SPEED" Classes="label" VerticalAlignment="Center"/>
@@ -91,15 +120,20 @@
                         <Button Content="MAP" Classes="secondary"
                             Command="{Binding ShowMapCommand}"
                             VerticalAlignment="Center"/>
-                        <Button Content="⏮ STEP" Classes="secondary" Command="{Binding ResetCommand}"
-                            Classes.grayed="{Binding !HasReplayData}"
+                        <Button Content="FULL EXCAVATION" Classes="primary"
+                            Command="{Binding RunFullExcavationCommand}"
+                            IsEnabled="{Binding CanRunFullExcavation}"
+                            Classes.grayed="{Binding !CanRunFullExcavation}"
                             VerticalAlignment="Center"/>
                         <Button Content="⏵ PLAY" Classes="primary" Command="{Binding PlayCommand}"
                             Classes.grayed="{Binding !HasReplayData}"
                             VerticalAlignment="Center"/>
-                        <Button Content="⏸" Classes="secondary" Command="{Binding PauseCommand}"
-                            VerticalAlignment="Center"
-                            Classes.grayed="{Binding !HasReplayData}"/>
+                        <Button Content="⏮ STEP" Classes="secondary" Command="{Binding StepBackwardCommand}"
+                            Classes.grayed="{Binding !HasReplayData}"
+                            VerticalAlignment="Center"/>
+                        <Button Content="{Binding PauseButtonContent}" Classes="secondary" Command="{Binding PauseCommand}"
+                            Classes.grayed="{Binding !HasReplayData}"
+                            VerticalAlignment="Center"/>
                         <Button Content="⏭ STEP" Classes="secondary" Command="{Binding StepForwardCommand}"
                             Classes.grayed="{Binding !HasReplayData}"
                             VerticalAlignment="Center"/>
@@ -503,6 +537,32 @@
                         <Button Grid.Column="2" Content="STEP-BY-STEP"
                                 Classes="secondary" HorizontalAlignment="Stretch"
                                 Command="{Binding StartStepByStepReplayCommand}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Border>
+        <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Grid.ColumnSpan="2"
+                Background="#CC000000" IsVisible="{Binding ShowFullExcavationPrompt}"
+                ZIndex="110">
+            <Border Background="#120F12" CornerRadius="12" Padding="30,24"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    MinWidth="420" MaxWidth="620">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="FULL EXCAVATION COMPLETE"
+                               FontSize="20" FontWeight="Bold"
+                               Foreground="#EF7E2A" HorizontalAlignment="Center"
+                               LetterSpacing="2"/>
+                    <TextBlock Text="{Binding FullExcavationSummary}"
+                               TextWrapping="Wrap" FontSize="13"
+                               Foreground="#E6B386"
+                               HorizontalAlignment="Center" TextAlignment="Center"/>
+                    <Grid ColumnDefinitions="*,12,*" Margin="0,6,0,0">
+                        <Button Grid.Column="0" Content="YES, SAVE"
+                                Classes="primary" HorizontalAlignment="Stretch"
+                                Command="{Binding ConfirmFullExcavationSaveCommand}"/>
+                        <Button Grid.Column="2" Content="NO"
+                                Classes="secondary" HorizontalAlignment="Stretch"
+                                Command="{Binding CancelFullExcavationSaveCommand}"/>
                     </Grid>
                 </StackPanel>
             </Border>

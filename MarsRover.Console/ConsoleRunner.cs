@@ -43,6 +43,8 @@ public class ConsoleRunner
             BoxLine($"  Episodes :  {info.EpisodesCompleted:N0}");
             BoxLine($"  Best     :  {info.BestMinerals} minerals  {MineralBar(info.BestMinerals, 23)}");
             BoxLine($"  States   :  {info.StatesKnown:N0}");
+            BoxLine($"  Schema   :  v{info.PolicySchemaVersion}");
+            BoxLine($"  Profile  :  {info.TrainingProfile}");
         }
         BoxBottom();
     }
@@ -173,6 +175,8 @@ public class ConsoleRunner
             BoxLine($"  Best score :  {savedModel.BestMinerals} minerals  {MineralBar(savedModel.BestMinerals, 23)}");
             BoxLine($"  Epsilon    :  {savedModel.Epsilon:F4}");
             BoxLine($"  States     :  {savedModel.StatesKnown:N0}");
+            BoxLine($"  Schema     :  v{savedModel.PolicySchemaVersion}");
+            BoxLine($"  Profile    :  {savedModel.TrainingProfile}");
             BoxLine($"  Saved at   :  {FormatDate(savedModel.SavedAt)}");
             BoxBottom();
             Ln();

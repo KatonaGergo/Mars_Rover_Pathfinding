@@ -65,7 +65,8 @@ public record TrainingOptions(
     SeedSweepOptions? SeedSweep = null,
     MissionEndMode MissionEndMode = MissionEndMode.ContinueUntilDeadline,
     string ProfileName = "default",
-    int EpisodeSeedOffset = 0);
+    int EpisodeSeedOffset = 0,
+    bool ResumeSavedModel = true);
 
 public record TrainingOptionOverrides(
     bool? UseAdaptiveEpsilon = null,

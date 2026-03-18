@@ -30,31 +30,50 @@ public partial class MainWindow : Window
 
     private void BindViewModel(MainViewModel vm)
     {
-        vm.PickFileAsync = PickMapFileAsync;
+        vm.PickMapFileAsync = PickMapFileAsync;
+        vm.PickModelFileAsync = PickModelFileAsync;
         vm.BackToMenuAsync = NavigateBackToMenuAsync;
     }
 
     /// <summary>
-    /// Opens a native file picker filtered to .txt and .csv files.
+    /// Opens a native file picker filtered to map files.
     /// Returns the chosen file path, or null if the user cancelled.
     /// </summary>
     private async Task<string?> PickMapFileAsync()
     {
         var options = new FilePickerOpenOptions
         {
-            Title            = "Load Mars Map or Model",
+            Title            = "Load Mars Map",
             AllowMultiple    = false,
             FileTypeFilter   = new[]
             {
                 new FilePickerFileType("Map files")
                 {
                     Patterns = new[] { "*.txt", "*.csv" }
-                },
-                new FilePickerFileType("Q-table model")
+                }
+            }
+        };
+
+        var files = await StorageProvider.OpenFilePickerAsync(options);
+        return files.Count > 0 ? files[0].TryGetLocalPath() : null;
+    }
+
+    /// <summary>
+    /// Opens a native file picker filtered to model JSON files only.
+    /// Returns the chosen file path, or null if the user cancelled.
+    /// </summary>
+    private async Task<string?> PickModelFileAsync()
+    {
+        var options = new FilePickerOpenOptions
+        {
+            Title            = "Load Q-table Model",
+            AllowMultiple    = false,
+            FileTypeFilter   = new[]
+            {
+                new FilePickerFileType("Model JSON files")
                 {
-                    Patterns = new[] { "*.qtable.json" }
-                },
-                new FilePickerFileType("All files")   { Patterns = new[] { "*.*"  } }
+                    Patterns = new[] { "*.json" }
+                }
             }
         };
 

@@ -146,6 +146,113 @@ public class HybridAgentAndReplayTests
         Assert.True(groups >= 3);
     }
 
+    [Fact]
+    public void ReplayDiversityActivation_ReflectsEnabledFlag()
+    {
+        var on = new TrainingOptions(
+            ReplayDiversity: new ReplayDiversityOptions(Enabled: true, StratifiedFraction: 0.4));
+        var off = new TrainingOptions(
+            ReplayDiversity: new ReplayDiversityOptions(Enabled: false, StratifiedFraction: 0.4));
+
+        Assert.True(SimulationRunner.ShouldUseDiversityReplay(on));
+        Assert.False(SimulationRunner.ShouldUseDiversityReplay(off));
+    }
+
+    [Fact]
+    public void SchemaMismatchResetFlow_ThrowsThenResetsModel()
+    {
+        string modelName = $"schema-reset-{Guid.NewGuid():N}";
+        string resolved = SimulationRunner.ResolveModelPath(modelName);
+        string qtablePath = resolved + ".qtable.json";
+        string metaPath = resolved + ".meta.json";
+        Directory.CreateDirectory(Path.GetDirectoryName(resolved)!);
+
+        try
+        {
+            new QTable().Save(qtablePath);
+            File.WriteAllText(metaPath,
+                "{\"EpisodesCompleted\":1,\"BestMinerals\":1,\"SavedAt\":\"2026-01-01T00:00:00Z\",\"PolicySchemaVersion\":1,\"TrainingProfile\":\"legacy\"}");
+
+            var map = CreateMap(startX: 10, startY: 10, minerals: [(11, 10, 'B')]);
+            var runner = new SimulationRunner(map, durationHours: 24, modelPath: modelName);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.RunSimulation());
+            Assert.Contains("schema mismatch", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+            var reset = SimulationRunner.ResetSavedModel(modelName, archive: false);
+            Assert.True(reset.HadModel);
+            Assert.False(File.Exists(qtablePath));
+            Assert.False(File.Exists(metaPath));
+        }
+        finally
+        {
+            if (File.Exists(qtablePath)) File.Delete(qtablePath);
+            if (File.Exists(metaPath)) File.Delete(metaPath);
+        }
+    }
+
+    [Fact]
+    public void Benchmarking_BuildSummary_IsDeterministic()
+    {
+        int[] seeds = [101, 202, 303];
+        BenchmarkRunResult[] runs =
+        [
+            new(101, 42, true, 95, 78.0),
+            new(202, 44, true, 94, 76.0),
+            new(303, 43, true, 96, 77.0)
+        ];
+
+        var s1 = Benchmarking.BuildSummary("Map/mars_map_50x50.csv", 48, 500, "model", seeds, runs);
+        var s2 = Benchmarking.BuildSummary("Map/mars_map_50x50.csv", 48, 500, "model", seeds, runs);
+
+        Assert.Equal(s1.MineralsMean, s2.MineralsMean, 8);
+        Assert.Equal(s1.MineralsMedian, s2.MineralsMedian, 8);
+        Assert.Equal(s1.MineralsStd, s2.MineralsStd, 8);
+        Assert.Equal(s1.ReturnHomeRate, s2.ReturnHomeRate, 8);
+        Assert.Equal(s1.TicksUsedMedian, s2.TicksUsedMedian, 8);
+        Assert.Equal(s1.BatteryAtEndMedian, s2.BatteryAtEndMedian, 8);
+    }
+
+    [Fact]
+    public void Benchmarking_SaveSummary_WritesExpectedFiles()
+    {
+        int[] seeds = [11, 22, 33];
+        BenchmarkRunResult[] runs =
+        [
+            new(11, 41, true, 94, 70.0),
+            new(22, 42, true, 95, 72.0),
+            new(33, 43, false, 96, 65.0)
+        ];
+
+        var summary = Benchmarking.BuildSummary(
+            mapPath: "Map/mars_map_50x50.csv",
+            hours: 48,
+            episodes: 300,
+            modelPath: "model",
+            seeds: seeds,
+            runs: runs);
+
+        string dir = Path.Combine(Path.GetTempPath(), "mars-rover-bench-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var (jsonPath, csvPath) = Benchmarking.SaveSummary(summary, "bench-shape-test", dir);
+
+            Assert.True(File.Exists(jsonPath));
+            Assert.True(File.Exists(csvPath));
+
+            string json = File.ReadAllText(jsonPath);
+            string csv = File.ReadAllText(csvPath);
+            Assert.Contains("\"Runs\": 3", json);
+            Assert.Contains("metric,value", csv);
+            Assert.Contains("seed,minerals,returnedHome,ticksUsed,batteryAtEnd", csv);
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, recursive: true);
+        }
+    }
+
     private static string StateGroup(string stateKey)
     {
         var parts = stateKey.Split(',');
