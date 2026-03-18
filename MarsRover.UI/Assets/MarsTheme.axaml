@@ -58,6 +58,18 @@
         <Setter Property="BorderBrush" Value="#FFEF7E2A" />
     </Style>
 
+    <Style Selector="Button.primary.grayed">
+        <Setter Property="Background" Value="#131313" />
+        <Setter Property="Foreground" Value="#8A8A8A" />
+        <Setter Property="BorderBrush" Value="#4A4A4A" />
+    </Style>
+
+    <Style Selector="Button.primary.grayed:pointerover">
+        <Setter Property="Background" Value="#1A1A1A" />
+        <Setter Property="Foreground" Value="#9C9C9C" />
+        <Setter Property="BorderBrush" Value="#5A5A5A" />
+    </Style>
+
     <Style Selector="Button.secondary">
         <Setter Property="Background" Value="#160D09" />
         <Setter Property="Foreground" Value="#E6B386" />
@@ -72,6 +84,18 @@
         <Setter Property="Background" Value="#24120B" />
         <Setter Property="Foreground" Value="#FFF1C49A" />
         <Setter Property="BorderBrush" Value="#66EF7E2A" />
+    </Style>
+
+    <Style Selector="Button.secondary.grayed">
+        <Setter Property="Background" Value="#121212" />
+        <Setter Property="Foreground" Value="#7E7E7E" />
+        <Setter Property="BorderBrush" Value="#404040" />
+    </Style>
+
+    <Style Selector="Button.secondary.grayed:pointerover">
+        <Setter Property="Background" Value="#171717" />
+        <Setter Property="Foreground" Value="#919191" />
+        <Setter Property="BorderBrush" Value="#4D4D4D" />
     </Style>
 
     <Style Selector="NumericUpDown">

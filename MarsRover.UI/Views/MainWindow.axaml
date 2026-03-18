@@ -96,11 +96,13 @@
                         <Button Content="⏮" Classes="secondary" Command="{Binding ResetCommand}"
                             VerticalAlignment="Center"/>
                         <Button Content="⏵ PLAY" Classes="primary" Command="{Binding PlayCommand}"
-                            IsEnabled="{Binding HasReplayData}" VerticalAlignment="Center"/>
+                            Classes.grayed="{Binding !HasReplayData}"
+                            VerticalAlignment="Center"/>
                         <Button Content="⏸" Classes="secondary" Command="{Binding PauseCommand}"
                             VerticalAlignment="Center"/>
                         <Button Content="⏭ STEP" Classes="secondary" Command="{Binding StepForwardCommand}"
-                            IsEnabled="{Binding HasReplayData}" VerticalAlignment="Center"/>
+                            Classes.grayed="{Binding !HasReplayData}"
+                            VerticalAlignment="Center"/>
                          <Button Content="Back to Main Menu" Classes="secondary" Command="{Binding BackToMenuCommand}" HorizontalAlignment="Right"/>
                     </StackPanel>
                 </ScrollViewer>

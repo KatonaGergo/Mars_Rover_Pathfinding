@@ -5,33 +5,34 @@
 
 
 ────────────────────────────────────────────────────────────────────────────────
-WHAT THIS PROJECT IS
+MI EZ A PROJEKT?
 ────────────────────────────────────────────────────────────────────────────────
 
-A Mars Rover that autonomously collects minerals on a 50×50 grid map and
-returns to base within a 24-hour mission window. The rover is controlled by
-a reinforcement learning agent — it learns over hundreds of training episodes
-which strategy to follow, then deploys the best learned policy to maximise
-how many minerals it brings home.
+Egy Mars-járó, amely önállóan gyűjti az ásványokat egy 50×50-es rácsos térképen, és
+24 órás küldetési időkereten belül visszatér a bázisra. A járót egy
+megerősítéses tanulási ügynök irányítja – több száz edzésmeneten keresztül
+megtanulja, melyik stratégiát kövesse, majd a legjobban elsajátított eljárást alkalmazza annak érdekében, hogy
+a lehető legtöbb ásványt szállítsa haza.
+A projekt C# (.NET 8) nyelven íródott, külső gépi tanulási dependenciák nélkül.
+Minden, a tanulási algoritmus, az útvonaltervezés, a fizikai szimuláció és
+a terminál interfész a semmiből épült fel.
 
-The project is written in C# (.NET 8) with no external ML dependencies.
-Everything, the learning algorithm, pathfinding, physics simulation, and
-terminal interface is built from scratch.
+Translated with DeepL.com (free version)
 
 
 ────────────────────────────────────────────────────────────────────────────────
-HOW TO RUN
+HOGYAN KELL FUTTATNI?
 ────────────────────────────────────────────────────────────────────────────────
 
-Prerequisites: .NET 8 SDK installed.
+Előfeltételek: A .NET 8 SDK telepítve.
 
-  # Restore packages (first time only)
+  # Csomagok visszaállítása (csak az első alkalommal)
   dotnet restore
 
-  # Train and run with defaults (reads config.json)
+  # Futtatás alapértelmezett beállításokkal (a config.json fájl beolvasásával)
   dotnet run --project MarsRover.Console
 
-  # Override any parameter on the command line
+  # Bármely paraméter felülírása a parancssorban
   dotnet run --project MarsRover.Console -- --map Map/mars_map_50x50.csv
   dotnet run --project MarsRover.Console -- --episodes 1000
   dotnet run --project MarsRover.Console -- --hours 24 --model mymodel
