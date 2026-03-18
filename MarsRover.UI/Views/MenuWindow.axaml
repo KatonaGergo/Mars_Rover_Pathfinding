@@ -341,11 +341,6 @@
                                FontSize="24"
                                Foreground="#FFF6AF76"
                                LetterSpacing="2"/>
-                    <TextBlock Text="Visual profile is optimized for dark control-room readability with restrained HUD effects."
-                               Foreground="#FFD2A377"
-                               FontSize="13"
-                               TextWrapping="Wrap"
-                               FontFamily="Consolas, Cascadia Mono"/>
 
                     <StackPanel Margin="0,8,0,4" Spacing="6">
                         <CheckBox x:Name="FullscreenModeCheckBox"
@@ -355,14 +350,29 @@
                                   FontSize="14"
                                   Checked="FullscreenMode_OnChanged"
                                   Unchecked="FullscreenMode_OnChanged"/>
-                         <CheckBox x:Name="Music"
-                                  IsChecked="False"
-                                  Content="Music"
+                        <Grid ColumnDefinitions="*,*">
+                         <TextBlock  Grid.Column="0" Grid.Row="0"
+                                  x:Name="Music"
+                                 
                                   Foreground="#FFF2BB8D"
                                   FontSize="14"
-                                  Checked="PlayMusic"
-                                  Unchecked="StopMusic"/>
-
+                                  Onchange="PlayMusic"
+                                 />
+                      <Slider Grid.Column="1" Grid.Row="0"
+                                Minimum="0" Maximum="100" Value="50" Width="200" ValueChanged="VolumeChanged"  >   
+                             <Slider.Resources>
+                                      <SolidColorBrush x:Key="SliderTrackFill">Gray</SolidColorBrush>
+                                      <SolidColorBrush x:Key="SliderTrackFillPointerOver">Gray</SolidColorBrush>
+                                      <SolidColorBrush x:Key="SliderTrackFillPressed">Gray</SolidColorBrush>
+                                      <SolidColorBrush x:Key="SliderTrackValueFill">#EF7E2A</SolidColorBrush>
+                                      <SolidColorBrush x:Key="SliderTrackValueFillPointerOver">#EF7E2A</SolidColorBrush>
+                                      <SolidColorBrush x:Key="SliderTrackValueFillPressed">#EF7E2A</SolidColorBrush>
+                                      <SolidColorBrush x:Key="SliderThumbBackground">#EF7E2A</SolidColorBrush>
+                                      <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver">#EF7E2A</SolidColorBrush>
+                                      <SolidColorBrush x:Key="SliderThumbBackgroundPressed">#EF7E2A</SolidColorBrush> 
+                            </Slider.Resources>
+                      </Slider>
+                            </Grid>
                     </StackPanel>
 
                     <Button Content="CLOSE" Classes="menuButton" Width="180" Height="46"

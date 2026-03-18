@@ -12,6 +12,7 @@ using LibVLCSharp.Avalonia;
 using LibVLCSharp.Shared;
 using MarsRover.UI.ViewModels;
 using NetCoreAudio;
+using Avalonia.Controls.Primitives; 
 
 namespace MarsRover.UI.Views;
 
@@ -474,17 +475,21 @@ public partial class MenuWindow : Window
         UiDisplaySettings.ApplyTo(this);
         UpdateFrameCornerVisibility();
     }
-    private readonly Player _musicPlayer= new Player();
+    private readonly Player _musicPlayer = new Player();
     private void PlayMusic(object? sender, RoutedEventArgs p)
     {
-        if (!_musicPlayer.Playing) {
+        if (!_musicPlayer.Playing)
+        {
             _musicPlayer.Play("");
         }
     }
-    private void StopMusic(object? sender, RoutedEventArgs s)
+  
+    public void VolumeChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
-
-        _musicPlayer.Stop();
-
+        if (_musicPlayer != null)
+        {
+            
+            _musicPlayer.SetVolume((byte)e.NewValue);
+        }
     }
 }
