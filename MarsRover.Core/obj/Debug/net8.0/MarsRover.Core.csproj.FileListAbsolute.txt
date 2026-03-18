@@ -39,3 +39,16 @@ C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\n
 C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\refint\MarsRover.Core.dll
 C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.pdb
 C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\ref\MarsRover.Core.dll
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\bin\Debug\net8.0\MarsRover.Core.deps.json
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\bin\Debug\net8.0\MarsRover.Core.dll
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\bin\Debug\net8.0\MarsRover.Core.pdb
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.csproj.AssemblyReference.cache
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.AssemblyInfoInputs.cache
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.AssemblyInfo.cs
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.csproj.CoreCompileInputs.cache
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.sourcelink.json
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.dll
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\refint\MarsRover.Core.dll
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.pdb
+C:\Users\gal.peter\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\ref\MarsRover.Core.dll

@@ -103,7 +103,7 @@
                 </LinearGradientBrush>
             </Border.Background>
         </Border>
-        <Image Source="C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.UI\Assets\MarsBack.png" Stretch="UniformToFill"/>
+        <Image Source="/Assets/MarsBack.png" Stretch="UniformToFill"/>
         <Border IsHitTestVisible="False" Opacity="0.1">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0.03,0" SpreadMethod="Repeat">
@@ -208,7 +208,7 @@
                                 CornerRadius="6">
                             <Grid Margin="5" RowDefinitions="*,Auto" >
                               
-                                   <Image Source="C:\Users\User\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.UI\Assets\realativo.png" MaxHeight="420" MaxWidth="560"/>
+                                   <Image Source="/Assets/realativo.png" MaxHeight="420" MaxWidth="560"/>
                              
                             </Grid>
                         </Border>
