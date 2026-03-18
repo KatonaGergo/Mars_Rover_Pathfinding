@@ -38,8 +38,8 @@ public static class TerminalUI
 
     // ── Mars sphere geometry ──────────────────────────────────────────────────
     // Column range [L, R] (inclusive) per planet row — defines the sphere mask
-    private static readonly (int L, int R)[] Mask =
-    [
+    private static readonly (int L, int R)[] Mask = new (int L, int R)[]
+    {
         (8,  14),   // row 0   narrow top cap
         (5,  17),   // row 1
         (3,  19),   // row 2
@@ -50,14 +50,14 @@ public static class TerminalUI
         (2,  20),   // row 7
         (3,  19),   // row 8
         (5,  17),   // row 9
-        (8,  14),   // row 10  narrow bottom cap
-    ];
+        (8,  14)  // row 10  narrow bottom cap
+    };
 
     // Surface texture per row. Length must be ≥ MarsW (23).
     // These strings tile horizontally; offset shifts the start position each frame
     // to create the rotation illusion.
-    private static readonly string[] Tex =
-    [
+    private static readonly string[] Tex = new string[]
+    {
         "░░▒▒▓▒░░▒▒░░▓▓▒░░▒▒▓░░▒▒░░▒▒▓▒░░▒▒░░▓▓▒░░▒▒▓░░",
         "▒▒░░░▒▒▓▒░░▒░░░▒▒▓░░░▒▒░▒▒░░░▒▒▓▒░░▒░░░▒▒▓░░░▒",
         "░▒▒▓▓░░░▒▒░▒▒▓▓░░░▒▒░▒░░▒▒▓░░░▒▒░▒▒▓▓░░░▒▒░▒▒▓",
@@ -69,7 +69,7 @@ public static class TerminalUI
         "░░▒▒▓░░▒▒░░░▒▒▓░░▒▒░░▒▒▓░░▒▒░░░▒▒▓░░▒▒░░░▒▒▓░░",
         "▒▒░░░▒▒░░▒▒▒░░░▒▒░░▒▒▒░░░▒▒░░▒▒▒░░░▒▒░░▒▒▒░░░▒",
         "░▓▒░░▒▒▓▓░░▒▒░░▒▓▒░░▒▒▓▓░░▒▒░░▒▓▒░░▒▒▓▓░░▒▒░░▒",
-    ];
+    };
 
     // ── Star field (fixed, generated once in static constructor) ──────────────
     private static readonly (int row, int col, char g)[] Stars;
@@ -79,7 +79,7 @@ public static class TerminalUI
     {
         var r    = new Random(17);
         var list = new List<(int, int, char)>();
-        char[] gc = ['·', '·', '·', '·', '*', '·'];
+        char[] gc = new char[] { '·', '·', '·', '·', '*', '·' };
 
         for (int i = 0; i < 55; i++)
         {
@@ -202,22 +202,22 @@ public static class TerminalUI
     // ═════════════════════════════════════════════════════════════════════════
 
     // Menu items: label (padded for uniform width), description shown below panel
-    private static readonly (string lbl, string desc)[] Items =
-    [
+    private static readonly (string lbl, string desc)[] Items = new (string lbl, string desc)[]
+    {
         ("  INITIATE MISSION SEQUENCE  ",
          "TRAIN AGENT  ·  DEPLOY BEST POLICY  ·  BEGIN EXPEDITION"),
         ("  SYSTEM DIAGNOSTICS         ",
          "VIEW SAVED MODEL  ·  Q-TABLE STATS  ·  MISSION HISTORY"),
         ("  CUT TRANSMISSION           ",
          "TERMINATE UPLINK  ·  POWER DOWN TERMINAL"),
-    ];
+    };
 
     // Status messages cycling in the bottom bar
-    private static readonly string[] StatusCycle =
-    [
+    private static readonly string[] StatusCycle = new string[]
+    {
         "LINK UNSTABLE", "SYNCHRONIZING..", "LINK UNSTABLE",
         "NOMINAL  ·  ALL SYSTEMS GO", "LINK UNSTABLE",
-    ];
+    };
 
     // Shared mutable state between input thread and animation thread.
     // Fields are volatile — animation thread reads, input thread writes.

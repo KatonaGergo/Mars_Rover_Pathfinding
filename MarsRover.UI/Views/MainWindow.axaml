@@ -45,7 +45,7 @@
                         <StackPanel Orientation="Vertical" Spacing="2">
                             <TextBlock Text="DURATION (h)" Classes="label"/>
                             <NumericUpDown Value="{Binding DurationHours}"
-                                       Minimum="24" Maximum="720"
+                                       Minimum="24" Maximum="10000"
                                        ClipValueToMinMax="True"
                                        ParsingNumberStyle="Integer"
                                        Width="120" FontSize="13"/>
@@ -91,13 +91,15 @@
                         <Button Content="MAP" Classes="secondary"
                             Command="{Binding ShowMapCommand}"
                             VerticalAlignment="Center"/>
-                        <Button Content="⏮" Classes="secondary" Command="{Binding ResetCommand}"
+                        <Button Content="⏮ STEP" Classes="secondary" Command="{Binding ResetCommand}"
+                            Classes.grayed="{Binding !HasReplayData}"
                             VerticalAlignment="Center"/>
                         <Button Content="⏵ PLAY" Classes="primary" Command="{Binding PlayCommand}"
                             Classes.grayed="{Binding !HasReplayData}"
                             VerticalAlignment="Center"/>
                         <Button Content="⏸" Classes="secondary" Command="{Binding PauseCommand}"
-                            VerticalAlignment="Center"/>
+                            VerticalAlignment="Center"
+                            Classes.grayed="{Binding !HasReplayData}"/>
                         <Button Content="⏭ STEP" Classes="secondary" Command="{Binding StepForwardCommand}"
                             Classes.grayed="{Binding !HasReplayData}"
                             VerticalAlignment="Center"/>
