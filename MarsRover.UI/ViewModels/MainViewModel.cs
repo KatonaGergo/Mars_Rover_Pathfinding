@@ -29,7 +29,7 @@ public partial class MainViewModel : ObservableObject
     private const int MaxDurationHours = 720;
 
     // ── Simulation state ─────────────────────────────────────────────────────
-    [ObservableProperty] private double _durationHours   = 48;
+    [ObservableProperty] private double? _durationHours  = 48;
     [ObservableProperty] private int    _trainingEpisodes = 1000;
     [ObservableProperty] private double _playbackSpeed   = 1.0;
 
@@ -103,17 +103,21 @@ public partial class MainViewModel : ObservableObject
     partial void OnHasLogChanged(bool value)            => OnPropertyChanged(nameof(HasReplayData));
     partial void OnGhostTrailChanged(List<MarsRover.Core.Algorithm.StepRecord>? value)
         => OnPropertyChanged(nameof(HasReplayData));
-    partial void OnDurationHoursChanged(double value)
+    partial void OnDurationHoursChanged(double? value)
     {
-        if (double.IsNaN(value) || double.IsInfinity(value))
+        if (!value.HasValue)
+            return;
+
+        double rawValue = value.Value;
+        if (double.IsNaN(rawValue) || double.IsInfinity(rawValue))
         {
             DurationHours = MinDurationHours;
             return;
         }
 
-        double clamped = Math.Clamp(value, MinDurationHours, MaxDurationHours);
+        double clamped = Math.Clamp(rawValue, MinDurationHours, MaxDurationHours);
         double rounded = Math.Round(clamped, MidpointRounding.AwayFromZero);
-        if (Math.Abs(rounded - value) > double.Epsilon)
+        if (Math.Abs(rounded - rawValue) > double.Epsilon)
             DurationHours = rounded;
     }
 
@@ -923,15 +927,16 @@ public partial class MainViewModel : ObservableObject
 
     private int EnsureValidDurationHours()
     {
-        if (double.IsNaN(DurationHours) || double.IsInfinity(DurationHours))
-            DurationHours = MinDurationHours;
+        double currentValue = DurationHours ?? MinDurationHours;
+        if (double.IsNaN(currentValue) || double.IsInfinity(currentValue))
+            currentValue = MinDurationHours;
 
         int clamped = (int)Math.Clamp(
-            Math.Round(DurationHours, MidpointRounding.AwayFromZero),
+            Math.Round(currentValue, MidpointRounding.AwayFromZero),
             MinDurationHours,
             MaxDurationHours);
 
-        if (Math.Abs(DurationHours - clamped) > double.Epsilon)
+        if (!DurationHours.HasValue || Math.Abs(DurationHours.Value - clamped) > double.Epsilon)
             DurationHours = clamped;
 
         return clamped;
