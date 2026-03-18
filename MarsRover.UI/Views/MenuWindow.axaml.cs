@@ -11,6 +11,7 @@ using Avalonia.Threading;
 using LibVLCSharp.Avalonia;
 using LibVLCSharp.Shared;
 using MarsRover.UI.ViewModels;
+using NetCoreAudio;
 
 namespace MarsRover.UI.Views;
 
@@ -472,5 +473,18 @@ public partial class MenuWindow : Window
         UiDisplaySettings.FullscreenEnabled = _fullscreenModeCheckBox.IsChecked != false;
         UiDisplaySettings.ApplyTo(this);
         UpdateFrameCornerVisibility();
+    }
+    private readonly Player _musicPlayer= new Player();
+    private void PlayMusic(object? sender, RoutedEventArgs p)
+    {
+        if (!_musicPlayer.Playing) {
+            _musicPlayer.Play("");
+        }
+    }
+    private void StopMusic(object? sender, RoutedEventArgs s)
+    {
+
+        _musicPlayer.Stop();
+
     }
 }
