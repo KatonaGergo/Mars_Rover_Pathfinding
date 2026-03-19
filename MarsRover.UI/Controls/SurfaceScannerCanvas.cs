@@ -27,8 +27,21 @@ public class SurfaceScannerCanvas : Control
     public static readonly StyledProperty<bool> ShowHudProperty =
         AvaloniaProperty.Register<SurfaceScannerCanvas, bool>(nameof(ShowHud), true);
 
+    public static readonly StyledProperty<double> LoadProgressProperty =
+        AvaloniaProperty.Register<SurfaceScannerCanvas, double>(nameof(LoadProgress), 1.0);
+
+    public static readonly StyledProperty<bool> EnableLoadFxProperty =
+        AvaloniaProperty.Register<SurfaceScannerCanvas, bool>(nameof(EnableLoadFx), true);
+
+    public static readonly StyledProperty<bool> UseSharedLockedViewProperty =
+        AvaloniaProperty.Register<SurfaceScannerCanvas, bool>(nameof(UseSharedLockedView), false);
+
     private static readonly Uri ScannerMapUri =
         new("avares://MarsRover.UI/Assets/MarsSurfaceScannerMap.png");
+
+    private static bool _hasSharedLockedView;
+    private static Point _sharedLockedCenter = new(0.5, 0.5);
+    private static double _sharedLockedZoom = 1.08;
 
     private const double ScanSpeed = 0.085;
     private const double BaseViewportWidth = 0.36;
@@ -78,6 +91,7 @@ public class SurfaceScannerCanvas : Control
     private double _snapDurationSeconds;
     private double _snapElapsedSeconds;
     private int _lastHandledJumpTrigger;
+    private double _loadFxPhase;
 
     static SurfaceScannerCanvas()
     {
@@ -89,6 +103,12 @@ public class SurfaceScannerCanvas : Control
             control.HandleTargetActiveChanged());
         ShowHudProperty.Changed.AddClassHandler<SurfaceScannerCanvas>((control, _) =>
             control.InvalidateVisual());
+        LoadProgressProperty.Changed.AddClassHandler<SurfaceScannerCanvas>((control, _) =>
+            control.HandleLoadFxStateChanged());
+        EnableLoadFxProperty.Changed.AddClassHandler<SurfaceScannerCanvas>((control, _) =>
+            control.HandleLoadFxStateChanged());
+        UseSharedLockedViewProperty.Changed.AddClassHandler<SurfaceScannerCanvas>((control, _) =>
+            control.HandleUseSharedLockedViewChanged());
     }
 
     public SurfaceScannerCanvas()
@@ -127,10 +147,29 @@ public class SurfaceScannerCanvas : Control
         set => SetValue(ShowHudProperty, value);
     }
 
+    public double LoadProgress
+    {
+        get => GetValue(LoadProgressProperty);
+        set => SetValue(LoadProgressProperty, value);
+    }
+
+    public bool EnableLoadFx
+    {
+        get => GetValue(EnableLoadFxProperty);
+        set => SetValue(EnableLoadFxProperty, value);
+    }
+
+    public bool UseSharedLockedView
+    {
+        get => GetValue(UseSharedLockedViewProperty);
+        set => SetValue(UseSharedLockedViewProperty, value);
+    }
+
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
         _isAttachedToVisualTree = true;
+        ApplySharedLockedViewIfRequested();
         HandleActiveChanged();
     }
 
@@ -150,19 +189,39 @@ public class SurfaceScannerCanvas : Control
         if (!TryEnsureScannerMap())
         {
             DrawFallbackBackground(context);
-            if (ShowHud)
-                DrawHudOverlay(context);
+            DrawHudOverlay(context);
             return;
         }
 
         DrawScannerImage(context);
-        if (ShowHud)
-            DrawHudOverlay(context);
+        DrawHudOverlay(context);
+    }
+
+    private void HandleUseSharedLockedViewChanged()
+    {
+        ApplySharedLockedViewIfRequested();
+    }
+
+    private void ApplySharedLockedViewIfRequested()
+    {
+        if (!UseSharedLockedView || !_hasSharedLockedView)
+            return;
+
+        _currentCenter = _sharedLockedCenter;
+        _currentZoom = _sharedLockedZoom;
+        _lastHandledJumpTrigger = JumpTrigger;
+        _isLockedOnTarget = true;
+        _snapTransitionActive = false;
+        _pauseRemaining = 0;
+        _stirOffset = new Point(0, 0);
+
+        HandleLoadFxStateChanged();
+        InvalidateVisual();
     }
 
     private void HandleActiveChanged()
     {
-        if (IsActive && _isAttachedToVisualTree && (!_isLockedOnTarget || _snapTransitionActive))
+        if (IsActive && _isAttachedToVisualTree && (!_isLockedOnTarget || _snapTransitionActive || ShouldAnimateLockedFeed()))
         {
             _lastTickUtc = DateTime.UtcNow;
             if (!_scanTimer.IsEnabled)
@@ -180,6 +239,12 @@ public class SurfaceScannerCanvas : Control
     {
         if (IsTargetActive)
             return;
+
+        if (UseSharedLockedView)
+        {
+            ApplySharedLockedViewIfRequested();
+            return;
+        }
 
         // Returning to scan mode: unlock and continue deterministic sweep.
         _isLockedOnTarget = false;
@@ -205,6 +270,13 @@ public class SurfaceScannerCanvas : Control
             return;
 
         _lastHandledJumpTrigger = JumpTrigger;
+
+        if (UseSharedLockedView)
+        {
+            ApplySharedLockedViewIfRequested();
+            return;
+        }
+
         StartSmoothSnapToRandomAndLock();
     }
 
@@ -246,6 +318,15 @@ public class SurfaceScannerCanvas : Control
         if (dt <= 0)
             return;
 
+        if (UseSharedLockedView && _hasSharedLockedView && !_snapTransitionActive)
+        {
+            _currentCenter = _sharedLockedCenter;
+            _currentZoom = _sharedLockedZoom;
+            _isLockedOnTarget = true;
+            _pauseRemaining = 0;
+            _stirOffset = new Point(0, 0);
+        }
+
         if (_snapTransitionActive)
         {
             _snapElapsedSeconds += dt;
@@ -262,7 +343,10 @@ public class SurfaceScannerCanvas : Control
             {
                 _snapTransitionActive = false;
                 _isLockedOnTarget = true;
-                _scanTimer.Stop();
+                _sharedLockedCenter = _currentCenter;
+                _sharedLockedZoom = _currentZoom;
+                _hasSharedLockedView = true;
+                HandleLoadFxStateChanged();
             }
 
             InvalidateVisual();
@@ -270,7 +354,28 @@ public class SurfaceScannerCanvas : Control
         }
 
         if (_isLockedOnTarget)
+        {
+            bool animateLockedOverlay = ShouldAnimateLockedFeed();
+            if (animateLockedOverlay)
+            {
+                _focusPhase += dt * 0.55;
+                _scanLinePhase += dt * (ShouldAnimateLockedFeed() ? 0.82 : 0.30);
+                if (_scanLinePhase > 1)
+                    _scanLinePhase -= Math.Floor(_scanLinePhase);
+                if (ShouldAnimateLockedFeed())
+                    UpdateLockedLoadFx(dt);
+                else
+                    _loadFxPhase += dt * 2.1;
+                _stirOffset = new Point(0, 0);
+                InvalidateVisual();
+                return;
+            }
+
+            _stirOffset = new Point(0, 0);
+            if (_scanTimer.IsEnabled)
+                _scanTimer.Stop();
             return;
+        }
 
         _focusPhase += dt * 0.65;
         _scanLinePhase += dt * 0.27;
@@ -315,6 +420,44 @@ public class SurfaceScannerCanvas : Control
         InvalidateVisual();
     }
 
+    private bool ShouldAnimateLockedFeed()
+    {
+        double progress = Math.Clamp(LoadProgress, 0.0, 1.0);
+        return EnableLoadFx && progress > 0.0 && progress < 1.0;
+    }
+
+    private void HandleLoadFxStateChanged()
+    {
+        if (!IsActive || !_isAttachedToVisualTree)
+        {
+            InvalidateVisual();
+            return;
+        }
+
+        if (_isLockedOnTarget && ShouldAnimateLockedFeed())
+        {
+            if (!_scanTimer.IsEnabled)
+            {
+                _lastTickUtc = DateTime.UtcNow;
+                _scanTimer.Start();
+            }
+        }
+        else if (_isLockedOnTarget && !_snapTransitionActive && _scanTimer.IsEnabled)
+        {
+            _scanTimer.Stop();
+        }
+
+        InvalidateVisual();
+    }
+
+    private void UpdateLockedLoadFx(double dt)
+    {
+        _loadFxPhase += dt * 10.0;
+        double ramp = 1.0 - Math.Clamp(LoadProgress, 0.0, 1.0);
+        _loadFxPhase += ramp * 2.4;
+        _stirOffset = new Point(0, 0);
+    }
+
     private void UpdateStirEffect(double dt)
     {
         _stirPhase += dt * 42.0;
@@ -352,19 +495,16 @@ public class SurfaceScannerCanvas : Control
         if (_scannerMap == null)
             return;
 
-        var stirredCenter = new Point(
-            _currentCenter.X + (_stirOffset.X / Math.Max(1.0, _scannerMap.Size.Width)),
-            _currentCenter.Y + (_stirOffset.Y / Math.Max(1.0, _scannerMap.Size.Height)));
+        Point center = _currentCenter;
+        double zoom = _currentZoom;
+        if (UseSharedLockedView && _hasSharedLockedView)
+        {
+            center = _sharedLockedCenter;
+            zoom = _sharedLockedZoom;
+        }
 
-        var source = CalculateSourceRect(Bounds.Size, _scannerMap.Size, stirredCenter, _currentZoom);
-
-        const double overscan = 5.0;
-        var destination = new Rect(
-            _stirOffset.X - overscan,
-            _stirOffset.Y - overscan,
-            Bounds.Width + (overscan * 2),
-            Bounds.Height + (overscan * 2));
-
+        var source = CalculateSourceRect(Bounds.Size, _scannerMap.Size, center, zoom);
+        var destination = new Rect(0, 0, Bounds.Width, Bounds.Height);
         context.DrawImage(_scannerMap, source, destination);
     }
 
@@ -401,8 +541,8 @@ public class SurfaceScannerCanvas : Control
     {
         double width = Bounds.Width;
         double height = Bounds.Height;
-        double ox = _stirOffset.X;
-        double oy = _stirOffset.Y;
+        double ox = 0;
+        double oy = 0;
 
         var shade = new LinearGradientBrush
         {
@@ -410,32 +550,41 @@ public class SurfaceScannerCanvas : Control
             EndPoint = new RelativePoint(0.5, 1, RelativeUnit.Relative),
             GradientStops =
             {
-                new GradientStop(Color.FromArgb(94, 12, 6, 3), 0),
-                new GradientStop(Color.FromArgb(148, 28, 11, 6), 1)
+                new GradientStop(Color.FromArgb(12, 24, 11, 6), 0),
+                new GradientStop(Color.FromArgb(22, 42, 17, 8), 1)
             }
         };
         context.FillRectangle(shade, new Rect(0, 0, width, height));
 
-        var rasterPen = new Pen(new SolidColorBrush(Color.FromArgb(26, 224, 248, 255)), 0.9);
-        double rasterStart = (_scanLinePhase * 7.0) % 7.0;
-        for (double y = -7 + rasterStart; y < height + 7; y += 7)
-            context.DrawLine(rasterPen, new Point(ox, y + oy), new Point(width + ox, y + oy));
-
-        var verticalPen = new Pen(new SolidColorBrush(Color.FromArgb(14, 198, 226, 255)), 0.8);
-        double columnStart = (_scanLinePhase * 34.0) % 62.0;
-        for (double x = -62 + columnStart; x < width + 62; x += 62)
-            context.DrawLine(verticalPen, new Point(x + ox, oy), new Point(x + ox, height + oy));
-
-        for (int i = 0; i < 3; i++)
+        bool animateLines = ShowHud || ShouldAnimateLockedFeed();
+        if (animateLines)
         {
-            double phase = _scanLinePhase + (i * 0.31);
-            phase -= Math.Floor(phase);
-            double scanY = (phase * height) + oy;
-            byte alpha = (byte)(152 - (i * 36));
-            double thickness = i == 0 ? 1.8 : 1.2;
-            var sweepPen = new Pen(new SolidColorBrush(Color.FromArgb(alpha, 255, 170, 112)), thickness);
-            context.DrawLine(sweepPen, new Point(ox, scanY), new Point(width + ox, scanY));
+            var rasterPen = new Pen(new SolidColorBrush(Color.FromArgb(26, 224, 248, 255)), 0.9);
+            double rasterStart = (_scanLinePhase * 7.0) % 7.0;
+            for (double y = -7 + rasterStart; y < height + 7; y += 7)
+                context.DrawLine(rasterPen, new Point(ox, y + oy), new Point(width + ox, y + oy));
+
+            var verticalPen = new Pen(new SolidColorBrush(Color.FromArgb(14, 198, 226, 255)), 0.8);
+            double columnStart = (_scanLinePhase * 34.0) % 62.0;
+            for (double x = -62 + columnStart; x < width + 62; x += 62)
+                context.DrawLine(verticalPen, new Point(x + ox, oy), new Point(x + ox, height + oy));
+
+            for (int i = 0; i < 3; i++)
+            {
+                double phase = _scanLinePhase + (i * 0.31);
+                phase -= Math.Floor(phase);
+                double scanY = (phase * height) + oy;
+                byte alpha = (byte)(152 - (i * 36));
+                double thickness = i == 0 ? 1.8 : 1.2;
+                var sweepPen = new Pen(new SolidColorBrush(Color.FromArgb(alpha, 255, 170, 112)), thickness);
+                context.DrawLine(sweepPen, new Point(ox, scanY), new Point(width + ox, scanY));
+            }
+
+            DrawLoadGlitchOverlay(context, width, height, ox, oy);
         }
+
+        if (!ShowHud)
+            return;
 
         var hudPen = new Pen(new SolidColorBrush(Color.FromArgb(184, 248, 241, 228)), 1.35);
         var inactiveColor = Color.FromArgb(220, 244, 242, 238);
@@ -502,6 +651,34 @@ public class SurfaceScannerCanvas : Control
         context.DrawLine(targetPen, new Point(center.X + xArm, center.Y + xArm), new Point(center.X + 2, center.Y + 2));
 
         DrawStatusBar(context, center, width, oy, IsTargetActive);
+    }
+
+    private void DrawLoadGlitchOverlay(DrawingContext context, double width, double height, double ox, double oy)
+    {
+        if (!ShouldAnimateLockedFeed())
+            return;
+
+        double ramp = 1.0 - Math.Clamp(LoadProgress, 0.0, 1.0);
+        if (ramp <= 0.01)
+            return;
+
+        byte bandAlpha = (byte)Math.Clamp(22 + (ramp * 84), 18, 110);
+        byte edgeAlpha = (byte)Math.Clamp(38 + (ramp * 108), 26, 146);
+        var bandBrush = new SolidColorBrush(Color.FromArgb(bandAlpha, 255, 176, 112));
+        var edgePen = new Pen(new SolidColorBrush(Color.FromArgb(edgeAlpha, 255, 222, 182)), 1.0 + (ramp * 0.8));
+
+        for (int i = 0; i < 3; i++)
+        {
+            double phase = (_scanLinePhase * (2.1 + (i * 0.45))) + (i * 0.23);
+            phase -= Math.Floor(phase);
+            double y = (phase * height) + oy;
+            double h = 5 + (i * 3) + (ramp * 7);
+            double jitter = Math.Sin((_loadFxPhase * 9.0) + (i * 2.1)) * (1.6 + (ramp * 5.8));
+            double shift = (Math.Sin((_scanLinePhase * 36.0) + (i * 1.7)) * (2.4 + (ramp * 9.0))) + jitter;
+            var rect = new Rect(ox + shift - 8, y, width + 16, h);
+            context.FillRectangle(bandBrush, rect);
+            context.DrawLine(edgePen, new Point(rect.X, rect.Y + rect.Height), new Point(rect.X + rect.Width, rect.Y + rect.Height));
+        }
     }
 
     private static void DrawStatusBar(DrawingContext context, Point center, double width, double oy, bool isActive)

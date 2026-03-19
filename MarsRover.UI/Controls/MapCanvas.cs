@@ -40,6 +40,9 @@ public class MapCanvas : Control
     public static readonly StyledProperty<bool> IsGhostModeProperty =
         AvaloniaProperty.Register<MapCanvas, bool>(nameof(IsGhostMode));
 
+    public static readonly StyledProperty<double> TileRevealProgressProperty =
+        AvaloniaProperty.Register<MapCanvas, double>(nameof(TileRevealProgress), 1.0);
+
     public GameMap?          GameMap    { get => GetValue(GameMapProperty);    set => SetValue(GameMapProperty, value); }
     public int               RoverX     { get => GetValue(RoverXProperty);     set => SetValue(RoverXProperty, value); }
     public int               RoverY     { get => GetValue(RoverYProperty);     set => SetValue(RoverYProperty, value); }
@@ -47,6 +50,7 @@ public class MapCanvas : Control
     public List<StepRecord>? GhostTrail { get => GetValue(GhostTrailProperty); set => SetValue(GhostTrailProperty, value); }
     public int               GhostIndex { get => GetValue(GhostIndexProperty); set => SetValue(GhostIndexProperty, value); }
     public bool              IsGhostMode{ get => GetValue(IsGhostModeProperty);set => SetValue(IsGhostModeProperty, value); }
+    public double            TileRevealProgress { get => GetValue(TileRevealProgressProperty); set => SetValue(TileRevealProgressProperty, value); }
 
     // ── Tile brushes ──────────────────────────────────────────────────────────
     private static readonly IBrush ObstacleBrush = new SolidColorBrush(Color.FromArgb(190, 65, 72, 88));
@@ -77,6 +81,7 @@ public class MapCanvas : Control
         GhostTrailProperty.Changed.AddClassHandler<MapCanvas>((c, _) => c.InvalidateVisual());
         GhostIndexProperty.Changed.AddClassHandler<MapCanvas>((c, _) => c.InvalidateVisual());
         IsGhostModeProperty.Changed.AddClassHandler<MapCanvas>((c, _) => c.InvalidateVisual());
+        TileRevealProgressProperty.Changed.AddClassHandler<MapCanvas>((c, _) => c.InvalidateVisual());
     }
 
 
@@ -104,6 +109,9 @@ public class MapCanvas : Control
         for (int y = 0; y < GameMap_.Height; y++)
             for (int x = 0; x < GameMap_.Width; x++)
             {
+                if (!IsTileVisibleByReveal(x, y))
+                    continue;
+
                 var rect = new Rect(x * cellW, y * cellH, cellW, cellH);
                 var type = map.GetTile(x, y);
                 bool hasMineral = map.HasMineral(x, y);
@@ -261,6 +269,18 @@ public class MapCanvas : Control
         StepEvent.Standby         => TrailStandby,
         _                          => TrailMove
     };
+
+    private bool IsTileVisibleByReveal(int x, int y)
+    {
+        double reveal = Math.Clamp(TileRevealProgress, 0.0, 1.0);
+        if (reveal >= 1.0)
+            return true;
+
+        int totalCells = GameMap_.Width * GameMap_.Height;
+        int visibleCells = (int)Math.Floor(reveal * totalCells);
+        int tileIndex = (y * GameMap_.Width) + x;
+        return tileIndex <= visibleCells;
+    }
 
     private static IBrush? TileBrush(GameMap map, int x, int y)
     {

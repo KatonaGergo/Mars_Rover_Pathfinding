@@ -205,6 +205,7 @@
                                 IsVisible="{Binding IsMapLoadScanOverlayVisible}"
                                 IsActive="True"
                                 ShowHud="{Binding IsMapScannerHudVisible}"
+                                LoadProgress="{Binding MapTileRevealProgress}"
                                 JumpTrigger="{Binding MapLoadScannerJumpTrigger}"
                                 IsTargetActive="{Binding IsMapScannerTargetActive}"/>
                             <controls:MapCanvas
@@ -263,17 +264,14 @@
                     </Border>
                     <!-- Map -->
                     <Grid Grid.Row="1" ClipToBounds="True">
-                        <Image Source="avares://MarsRover.UI/Assets/MarsSurface.png"
-                               Stretch="UniformToFill"
-                               Opacity="0.54"/>
-                        <Border IsHitTestVisible="False" Opacity="0.32">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                    <GradientStop Offset="0" Color="#5A1E1009"/>
-                                    <GradientStop Offset="1" Color="#A1160B06"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                        </Border>
+                        <controls:SurfaceScannerCanvas
+                            IsActive="True"
+                            ShowHud="False"
+                            EnableLoadFx="False"
+                            UseSharedLockedView="True"
+                            LoadProgress="1"
+                            JumpTrigger="{Binding MapLoadScannerJumpTrigger}"
+                            IsTargetActive="{Binding IsMapScannerTargetActive}"/>
                         <controls:MapCanvas
                             GameMap="{Binding GameMap}"
                             RoverX="{Binding RoverX}"
