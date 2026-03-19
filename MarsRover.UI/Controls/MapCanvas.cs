@@ -1,9 +1,12 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using MarsRover.Core.Algorithm;
 using MarsRover.Core.Models;
 using MarsRover.Core.Simulation;
+using System.Reflection;
 
 namespace MarsRover.UI.Controls;
 
@@ -76,6 +79,17 @@ public class MapCanvas : Control
         IsGhostModeProperty.Changed.AddClassHandler<MapCanvas>((c, _) => c.InvalidateVisual());
     }
 
+
+
+    private readonly Bitmap _rockImg = new Bitmap(AssetLoader.Open(new Uri("avares://MarsRover.UI/Assets/Models/akadaly.png")));
+    private readonly Bitmap _mineralB = new Bitmap(AssetLoader.Open(new Uri("avares://MarsRover.UI/Assets/Models/kekasvany.png")));
+    private readonly Bitmap _mineralY = new Bitmap(AssetLoader.Open(new Uri("avares://MarsRover.UI/Assets/Models/sargaasvany.png")));
+    private readonly Bitmap _mineralG = new Bitmap(AssetLoader.Open(new Uri("avares://MarsRover.UI/Assets/Models/zoldasvany.png")));
+    private readonly Bitmap _rover = new Bitmap(AssetLoader.Open(new Uri("avares://MarsRover.UI/Assets/Models/rover2.png")));
+
+
+
+
     // ── Rendering ─────────────────────────────────────────────────────────────
 
     public override void Render(DrawingContext ctx)
@@ -90,10 +104,28 @@ public class MapCanvas : Control
         for (int y = 0; y < GameMap_.Height; y++)
             for (int x = 0; x < GameMap_.Width; x++)
             {
-                var tileBrush = TileBrush(map, x, y);
-                if (tileBrush is not null)
+                var rect = new Rect(x * cellW, y * cellH, cellW, cellH);
+                var type = map.GetTile(x, y);
+                bool hasMineral = map.HasMineral(x, y);
+
+                // Megkeressük, melyik képet kell rajzolni
+                Bitmap? imageToDraw = type switch
                 {
-                    ctx.FillRectangle(tileBrush, new Rect(x * cellW, y * cellH, cellW, cellH));
+                    TileType.Obstacle => _rockImg,
+                    TileType.MineralB when hasMineral => _mineralB,
+                    TileType.MineralY when hasMineral => _mineralY,
+                    TileType.MineralG when hasMineral => _mineralG,
+                    _ => null
+                };
+
+                if (imageToDraw != null)
+                {
+                    // Itt rajzoljuk ki a képet a színes négyzet helyett!
+                    ctx.DrawImage(imageToDraw, rect);
+                }
+                else if (type == TileType.Start)
+                {
+                    ctx.FillRectangle(StartBrush, rect);
                 }
             }
 
@@ -173,21 +205,26 @@ public class MapCanvas : Control
             }
 
             // ── Ghost rover: current position ─────────────────────────────────
+            // ── Ghost rover: current position (Képpel és áttetszőséggel) ───────────────
             if (GhostIndex > 0 && GhostIndex <= trail.Count)
             {
                 var cur = trail[Math.Min(GhostIndex, trail.Count) - 1];
+
+                // Pozíció kiszámítása (ugyanaz a méretezés, mint a sima rovernél)
                 double gx = cur.X * cellW + cellW * 0.1;
                 double gy = cur.Y * cellH + cellH * 0.1;
-                double gw = cellW * 0.8;
-                double gh = cellH * 0.8;
+                var ghostRect = new Rect(gx, gy, cellW * 0.8, cellH * 0.8);
 
+                // PushOpacity: minden, ami a blokkon belül van, 50%-ban átlátszó lesz
+                using (ctx.PushOpacity(0.5))
+                {
+                    ctx.DrawImage(_rover, ghostRect);
+                }
 
-                ctx.FillRectangle(new SolidColorBrush(Color.FromArgb(200, 255, 255, 255)),
-                                  new Rect(gx, gy, gw, gh));
-
+                // Opcionális: Egy vékony keret, hogy jobban elkülönüljön a háttértől
                 ctx.DrawRectangle(null,
-                                  new Pen(new SolidColorBrush(Color.Parse("#FF6B35")), 1.5),
-                                  new Rect(gx, gy, gw, gh));
+                                  new Pen(new SolidColorBrush(Color.Parse("#FF6B35")), 1.0),
+                                  ghostRect);
             }
 
             // ── Episode info overlay ──────────────────────────────────────────
@@ -206,7 +243,9 @@ public class MapCanvas : Control
             // ── Normal rover ──────────────────────────────────────────────────
             double rx = RoverX * cellW + cellW * 0.15;
             double ry = RoverY * cellH + cellH * 0.15;
-            ctx.FillRectangle(RoverBrush, new Rect(rx, ry, cellW * 0.7, cellH * 0.7));
+            var roverRect = new Rect(rx, ry, cellW * 0.7, cellH * 0.7);
+
+            ctx.DrawImage(_rover, roverRect);
         }
     }
 
