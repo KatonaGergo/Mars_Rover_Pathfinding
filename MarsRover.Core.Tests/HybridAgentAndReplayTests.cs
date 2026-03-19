@@ -92,18 +92,124 @@ public class HybridAgentAndReplayTests
     }
 
     [Theory]
-    [InlineData(95, 0)] // <=0
-    [InlineData(94, 1)] // 1-2
-    [InlineData(91, 2)] // 3-5
-    [InlineData(80, 3)] // 6+
-    public void ReturnMarginBucket_IsComputedAsExpected(int tick, int expectedBucket)
+    [InlineData(95, 0)] // ticksRemaining=1 -> urgent
+    [InlineData(93, 0)] // ticksRemaining=3 -> urgent
+    [InlineData(92, 1)] // ticksRemaining=4 -> non-urgent
+    public void UrgencyBucket_IsComputedAsExpected(int tick, int expectedBucket)
     {
         var map = CreateMap(startX: 10, startY: 10);
         var agent = new HybridAgent(map, totalTicks: 96, existingTable: null, seed: 1);
         var state = BuildState(10, 10, battery: 100, tick: tick);
 
         var q = agent.BuildQLearningState(state, map);
-        Assert.Equal(expectedBucket, q.ReturnMarginBucket);
+        Assert.Equal(expectedBucket, q.UrgencyBucket);
+    }
+
+    [Fact]
+    public void EvaluateFeasibleMinerals_PrefersCloserTarget_WhenBothAreFeasible()
+    {
+        var map = CreateMap(
+            startX: 10,
+            startY: 10,
+            minerals:
+            [
+                (11, 10, 'B'), // near
+                (20, 10, 'Y')  // farther but still feasible
+            ]);
+        var agent = new HybridAgent(map, totalTicks: 200, existingTable: null, seed: 1);
+        var state = BuildState(10, 10, battery: 100, tick: 0);
+
+        int[,] roverField = AStarPathfinder.BuildDistanceField(map, state.X, state.Y);
+        int[,] baseField = AStarPathfinder.BuildDistanceField(map, map.StartX, map.StartY);
+
+        var method = typeof(HybridAgent).GetMethod(
+            "EvaluateFeasibleMinerals",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        var result = (System.Collections.IEnumerable)method!.Invoke(
+            agent,
+            [state, map, roverField, baseField, RiskMode.Conservative, 0])!;
+
+        double near = double.NaN;
+        double far = double.NaN;
+
+        foreach (var item in result)
+        {
+            int x = (int)item!.GetType().GetProperty("X")!.GetValue(item)!;
+            int y = (int)item.GetType().GetProperty("Y")!.GetValue(item)!;
+            double score = (double)item.GetType().GetProperty("BaseScore")!.GetValue(item)!;
+            if (x == 11 && y == 10) near = score;
+            if (x == 20 && y == 10) far = score;
+        }
+
+        Assert.False(double.IsNaN(near));
+        Assert.False(double.IsNaN(far));
+        Assert.True(near > far);
+    }
+
+    [Fact]
+    public void ShouldLeaveBase_DoesNotRelaunch_OnZeroSlackMargin()
+    {
+        var map = CreateMap(startX: 10, startY: 10, minerals: [(11, 10, 'B')]);
+        var agent = new HybridAgent(map, totalTicks: 96, existingTable: null, seed: 1);
+        var state = BuildState(10, 10, battery: 100, tick: 93); // 3 ticks left => zero post-leg slack
+
+        var method = typeof(HybridAgent).GetMethod(
+            "ShouldLeaveBase",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        bool shouldLeave = (bool)method!.Invoke(agent, [state, map])!;
+        Assert.False(shouldLeave);
+    }
+
+    [Fact]
+    public void FindCloserCollectionTarget_Interrupts_WhenStrictlyCloser()
+    {
+        var map = CreateMap(
+            startX: 10,
+            startY: 10,
+            minerals:
+            [
+                (11, 10, 'B'), // distance 1
+                (18, 10, 'Y')
+            ]);
+        var agent = new HybridAgent(map, totalTicks: 200, existingTable: null, seed: 1);
+        var state = BuildState(10, 10, battery: 100, tick: 0);
+        SetQueuedPathLength(agent, 4);
+
+        var method = typeof(HybridAgent).GetMethod(
+            "FindCloserCollectionTarget",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        var result = ((int x, int y)?)method!.Invoke(agent, [state, map]);
+        Assert.True(result.HasValue);
+        Assert.Equal((11, 10), result!.Value);
+    }
+
+    [Fact]
+    public void FindCloserCollectionTarget_DoesNotInterrupt_WhenEqualDistance()
+    {
+        var map = CreateMap(
+            startX: 10,
+            startY: 10,
+            minerals:
+            [
+                (12, 10, 'B') // distance 2
+            ]);
+        var agent = new HybridAgent(map, totalTicks: 200, existingTable: null, seed: 1);
+        var state = BuildState(10, 10, battery: 100, tick: 0);
+        SetQueuedPathLength(agent, 2); // equal distance should not switch
+
+        var method = typeof(HybridAgent).GetMethod(
+            "FindCloserCollectionTarget",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        var result = ((int x, int y)?)method!.Invoke(agent, [state, map]);
+        Assert.False(result.HasValue);
     }
 
     [Fact]
@@ -116,6 +222,75 @@ public class HybridAgentAndReplayTests
 
         Assert.NotEmpty(log);
         Assert.Equal(48, log[^1].Tick);
+    }
+
+    [Fact]
+    public void SimulateLegWithPolicy_MatchesDynamicLegAcrossDayNightBoundary()
+    {
+        var map = CreateMap(startX: 10, startY: 10);
+        var agent = new HybridAgent(map, totalTicks: 200, existingTable: null, seed: 1);
+
+        var legMethod = typeof(HybridAgent).GetMethod(
+            "SimulateLegWithPolicy",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        var dynMethod = typeof(HybridAgent).GetMethod(
+            "SimulateDynamicLeg",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(legMethod);
+        Assert.NotNull(dynMethod);
+
+        // Tick 28 is 4 ticks before night (day length is 32 ticks), where
+        // fixed-speed simulation historically diverged from dynamic policy.
+        object? leg = legMethod!.Invoke(agent, [28, 12, 60.0]);
+        object? dyn = dynMethod!.Invoke(agent, [28, 12, 60.0]);
+
+        Assert.NotNull(leg);
+        Assert.NotNull(dyn);
+
+        bool legFeasible = (bool)leg!.GetType().GetProperty("IsFeasible")!.GetValue(leg)!;
+        int legTicks = (int)leg.GetType().GetProperty("Ticks")!.GetValue(leg)!;
+        double legFinal = (double)leg.GetType().GetProperty("FinalBattery")!.GetValue(leg)!;
+        double legMin = (double)leg.GetType().GetProperty("MinBattery")!.GetValue(leg)!;
+
+        bool dynFeasible = (bool)dyn!.GetType().GetProperty("IsFeasible")!.GetValue(dyn)!;
+        int dynTicks = (int)dyn.GetType().GetProperty("Ticks")!.GetValue(dyn)!;
+        double dynFinal = (double)dyn.GetType().GetProperty("FinalBattery")!.GetValue(dyn)!;
+        double dynMin = (double)dyn.GetType().GetProperty("MinBattery")!.GetValue(dyn)!;
+
+        Assert.Equal(dynFeasible, legFeasible);
+        Assert.Equal(dynTicks, legTicks);
+        Assert.Equal(dynFinal, legFinal, 8);
+        Assert.Equal(dynMin, legMin, 8);
+    }
+
+    [Fact]
+    public void ChooseSpeed_DayTimeRespectsBatterySafetyMargin()
+    {
+        var map = CreateMap(startX: 10, startY: 10);
+        var agent = new HybridAgent(map, totalTicks: 200, existingTable: null, seed: 1);
+        var state = BuildState(x: 10, y: 10, battery: 9.0, tick: 0); // daytime
+
+        var speed = agent.ChooseSpeed(state, map, stepsRemaining: 3);
+
+        // Fast would end at 1.0 battery (>=0 but <3.0 margin), so Normal is required.
+        Assert.Equal(RoverSpeed.Normal, speed);
+    }
+
+    [Fact]
+    public void EvaluateFeasibleMinerals_ReturnPenaltyScalesWithMissionUrgency()
+    {
+        var map = CreateMap(startX: 10, startY: 10, minerals: [(20, 10, 'B')]);
+        var agent = new HybridAgent(map, totalTicks: 200, existingTable: null, seed: 1);
+        var evalMethod = typeof(HybridAgent).GetMethod(
+            "EvaluateFeasibleMinerals",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(evalMethod);
+
+        double scoreEarly = EvaluateSingleCandidateScore(agent, map, evalMethod!, tick: 0);
+        double scoreLate = EvaluateSingleCandidateScore(agent, map, evalMethod!, tick: 96);
+
+        Assert.True(scoreEarly > scoreLate);
     }
 
     [Fact]
@@ -274,6 +449,22 @@ public class HybridAgentAndReplayTests
             IsMining: false,
             LastAction: RoverAction.StandbyAction);
 
+    private static double EvaluateSingleCandidateScore(
+        HybridAgent agent,
+        GameMap map,
+        MethodInfo evalMethod,
+        int tick)
+    {
+        var state = BuildState(10, 10, battery: 100, tick: tick);
+        int[,] roverField = AStarPathfinder.BuildDistanceField(map, state.X, state.Y);
+        int[,] baseField = AStarPathfinder.BuildDistanceField(map, map.StartX, map.StartY);
+        var result = (System.Collections.IEnumerable)evalMethod.Invoke(
+            agent,
+            [state, map, roverField, baseField, RiskMode.Conservative, 0])!;
+        var candidate = result.Cast<object>().Single();
+        return (double)candidate.GetType().GetProperty("BaseScore")!.GetValue(candidate)!;
+    }
+
     private static void ForceReturningPhase(HybridAgent agent)
     {
         var field = typeof(HybridAgent).GetField(
@@ -281,6 +472,20 @@ public class HybridAgentAndReplayTests
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(field);
         field!.SetValue(agent, MissionPhase.Returning);
+    }
+
+    private static void SetQueuedPathLength(HybridAgent agent, int length)
+    {
+        var field = typeof(HybridAgent).GetField(
+            "_currentPath",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+
+        var q = new Queue<PathStep>();
+        for (int i = 0; i < length; i++)
+            q.Enqueue(new PathStep(0, 0, Direction.East));
+
+        field!.SetValue(agent, q);
     }
 
     private static GameMap CreateMap(

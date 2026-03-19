@@ -84,7 +84,7 @@ public class SimulationRunner
     // ── Training ──────────────────────────────────────────────────────────────
 
     public TrainingResult Train(
-        int episodes = 1000,
+        int episodes = 2000,
         Action<TrainingProgress>? onProgress = null)
         => Train(episodes, onProgress, options: null);
 
@@ -95,7 +95,7 @@ public class SimulationRunner
         => TrainWithBest(episodes, onProgress, GetEffectiveOptions(options)).result;
 
     private (TrainingResult result, QTable bestTable) TrainWithBest(
-        int episodes = 1000,
+        int episodes = 2000,
         Action<TrainingProgress>? onProgress = null,
         TrainingOptions? options = null)
     {
@@ -364,6 +364,8 @@ public class SimulationRunner
         int    bestMinerals = 0;
         QTable bestTable    = new QTable();   // snapshot of Q-table at peak performance
         int    episodeBatch = ParallelThreads; // collect this many episodes per iteration
+        bool   emitProgress = onProgress is not null;
+        bool   captureSnapshots = emitProgress && options.CaptureProgressSnapshots;
 
         // We iterate in groups of ParallelThreads episodes
         int iterations = (int)Math.Ceiling(episodes / (double)episodeBatch);
@@ -389,7 +391,8 @@ public class SimulationRunner
                         seed: options.EpisodeSeedOffset + seedOffset + epBase + threadId,
                         options.MissionEndMode,
                         options.UseAdaptiveEpsilon,
-                        options.AdaptiveEpsilonMax);
+                        options.AdaptiveEpsilonMax,
+                        captureSnapshots);
                 });
 
             // ── SERIAL MERGE PHASE ────────────────────────────────────────────
@@ -429,17 +432,23 @@ public class SimulationRunner
 
                 // Emit one progress item per completed run using current run metrics,
                 // not batch averages or best-only values.
-                onProgress?.Invoke(new TrainingProgress(
-                    Episode:      epsDone,
-                    TotalEps:     episodes,
-                    Epsilon:      epsilon,
-                    LastReward:   ep.TotalReward,
-                    BestMinerals: bestMinerals,
-                    StatesKnown:  sharedTable.StateCount,
-                    BufferSize:   buffer.Count,
-                    LastBattery:  ep.EndBattery,
-                    LastMinerals: ep.MineralsCollected,
-                    Snapshot:     BuildSnapshot(ep, epsDone)));
+                if (emitProgress)
+                {
+                    EpisodeSnapshot? snapshot = captureSnapshots
+                        ? BuildSnapshot(ep, epsDone)
+                        : null;
+                    onProgress!(new TrainingProgress(
+                        Episode:      epsDone,
+                        TotalEps:     episodes,
+                        Epsilon:      epsilon,
+                        LastReward:   ep.TotalReward,
+                        BestMinerals: bestMinerals,
+                        StatesKnown:  sharedTable.StateCount,
+                        BufferSize:   buffer.Count,
+                        LastBattery:  ep.EndBattery,
+                        LastMinerals: ep.MineralsCollected,
+                        Snapshot:     snapshot));
+                }
             }
 
             // ③ PER REPLAY: sample and update Q-table once buffer is warm
@@ -490,7 +499,8 @@ public class SimulationRunner
         int seed,
         MissionEndMode missionEndMode = MissionEndMode.ContinueUntilDeadline,
         bool useAdaptiveEpsilon = false,
-        double adaptiveEpsilonMax = 1.0)
+        double adaptiveEpsilonMax = 1.0,
+        bool captureSteps = false)
     {
         var episodeMap = _map.Clone();
         var engine     = new SimulationEngine(episodeMap, _durationHours);
@@ -502,7 +512,7 @@ public class SimulationRunner
         agent.ResetNavigation();
 
         var    transitions  = new List<StrategicTransition>();
-        var    steps        = new List<StepRecord>();
+        List<StepRecord>? steps = captureSteps ? new List<StepRecord>() : null;
         double totalReward  = 0;
 
         while (!engine.IsFinished && !engine.BatteryDead
@@ -541,33 +551,36 @@ public class SimulationRunner
             // Ghost record — expand multi-step moves into one record per cell
             // so the replay trail shows every individual cell the rover visited,
             // not just the tick start position (which skips 2 cells on Fast moves).
-            if (action.Type == RoverActionType.Move && action.Directions is { Count: > 1 })
+            if (captureSteps && steps is not null)
             {
-                int rx = state.X, ry = state.Y;
-                for (int s = 0; s < action.Directions.Count; s++)
+                if (action.Type == RoverActionType.Move && action.Directions is { Count: > 1 })
                 {
-                    var (nx, ny) = episodeMap.ApplyDirection(rx, ry, action.Directions[s]);
-                    bool isLast  = s == action.Directions.Count - 1;
-                    var stepEvt  = isLast && collected    ? StepEvent.MineSuccess
-                                 : isLast && engine.BatteryDead  ? StepEvent.BatteryDead
-                                 : isLast && returnedHome ? StepEvent.ReturnHome
-                                 : isLast && newState.Battery < 5  ? StepEvent.BatteryCritical
-                                 : isLast && newState.Battery < 20 ? StepEvent.BatteryLow
-                                 : StepEvent.Move;
-                    steps.Add(new StepRecord(rx, ry, stepEvt, isLast ? reward : 0));
-                    rx = nx; ry = ny;
+                    int rx = state.X, ry = state.Y;
+                    for (int s = 0; s < action.Directions.Count; s++)
+                    {
+                        var (nx, ny) = episodeMap.ApplyDirection(rx, ry, action.Directions[s]);
+                        bool isLast  = s == action.Directions.Count - 1;
+                        var stepEvt  = isLast && collected    ? StepEvent.MineSuccess
+                                     : isLast && engine.BatteryDead  ? StepEvent.BatteryDead
+                                     : isLast && returnedHome ? StepEvent.ReturnHome
+                                     : isLast && newState.Battery < 5  ? StepEvent.BatteryCritical
+                                     : isLast && newState.Battery < 20 ? StepEvent.BatteryLow
+                                     : StepEvent.Move;
+                        steps.Add(new StepRecord(rx, ry, stepEvt, isLast ? reward : 0));
+                        rx = nx; ry = ny;
+                    }
                 }
-            }
-            else
-            {
-                var evt = collected              ? StepEvent.MineSuccess
-                        : engine.BatteryDead     ? StepEvent.BatteryDead
-                        : returnedHome           ? StepEvent.ReturnHome
-                        : newState.Battery < 5   ? StepEvent.BatteryCritical
-                        : newState.Battery < 20  ? StepEvent.BatteryLow
-                        : action.Type == RoverActionType.Standby ? StepEvent.Standby
-                        : StepEvent.Move;
-                steps.Add(new StepRecord(state.X, state.Y, evt, reward));
+                else
+                {
+                    var evt = collected              ? StepEvent.MineSuccess
+                            : engine.BatteryDead     ? StepEvent.BatteryDead
+                            : returnedHome           ? StepEvent.ReturnHome
+                            : newState.Battery < 5   ? StepEvent.BatteryCritical
+                            : newState.Battery < 20  ? StepEvent.BatteryLow
+                            : action.Type == RoverActionType.Standby ? StepEvent.Standby
+                            : StepEvent.Move;
+                    steps.Add(new StepRecord(state.X, state.Y, evt, reward));
+                }
             }
 
             totalReward += reward;
@@ -578,7 +591,7 @@ public class SimulationRunner
 
         return new EpisodeData(
             Transitions:       transitions,
-            Steps:             steps,
+            Steps:             steps ?? new List<StepRecord>(),
             TotalReward:       totalReward,
             MineralsCollected: final.TotalMinerals,
             BatteryDied:       engine.BatteryDead,
@@ -719,7 +732,7 @@ public class SimulationRunner
     }
 
     public (TrainingResult training, List<SimulationLogEntry> log) TrainAndRun(
-        int episodes = 1000,
+        int episodes = 2000,
         Action<TrainingProgress>? onProgress = null)
         => TrainAndRun(episodes, onProgress, options: null);
 

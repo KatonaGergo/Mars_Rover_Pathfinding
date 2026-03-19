@@ -324,6 +324,18 @@
                 Margin="0,220,0,0"
                 Background="#2CFFB36E"/>
 
+        <Border x:Name="TransitionGlowLayer"
+                IsHitTestVisible="False"
+                Opacity="0"
+                ZIndex="80">
+            <Border.Background>
+                <RadialGradientBrush Center="0.5,0.42" Radius="0.95">
+                    <GradientStop Offset="0" Color="#5CFF8C2A"/>
+                    <GradientStop Offset="1" Color="#001A0702"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
         <Border x:Name="SettingsOverlay"
                 IsVisible="False"
                 Background="#B3000000"

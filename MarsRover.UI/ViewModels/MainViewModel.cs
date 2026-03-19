@@ -30,7 +30,7 @@ public partial class MainViewModel : ObservableObject
 
     // ── Simulation state ─────────────────────────────────────────────────────
     [ObservableProperty] private double? _durationHours  = 48;
-    [ObservableProperty] private int    _trainingEpisodes = 1000;
+    [ObservableProperty] private int    _trainingEpisodes = 2000;
     [ObservableProperty] private double _playbackSpeed   = 1.0;
 
     [ObservableProperty] private bool   _isTraining      = false;
@@ -62,7 +62,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private GameMap? _gameMap;
     public bool HasMapLoaded => GameMap != null;
     public bool HasReplayData => HasLog || (GhostTrail?.Count > 0);
-    public bool CanRunFullExcavation => HasMapLoaded && HasTrainingCompletedInSession && !IsTraining && !IsFullExcavationRunning;
+    public bool CanRunFullExcavation => HasMapLoaded && !IsTraining && !IsFullExcavationRunning;
     public string PauseButtonContent => IsPaused ? "▶" : "⏸";
     private string _modelPath = "q_table"; // base path — runner appends .weights.json / .meta.json
     private string _mapPath   = "";           // stored on map load — used for run log
@@ -72,6 +72,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showFullExcavationPrompt = false;
     [ObservableProperty] private string _fullExcavationSummary = string.Empty;
     private List<SimulationLogEntry>? _pendingFullExcavationLog;
+    private bool _deferFullExcavationPromptUntilPlaybackEnds;
     private bool _modelLoadedManually;
     private bool _allowResumeThisSession;
 
@@ -354,6 +355,14 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task StartNoReplay()
+    {
+        _userWantsToWatch = false;
+        ShowWatchPrompt = false;
+        await StartTraining();
+    }
+
+    [RelayCommand]
     private async Task StartStepByStepReplay()
     {
         _userWantsToWatch   = true;
@@ -400,7 +409,8 @@ public partial class MainViewModel : ObservableObject
         HasSavedModel = runner.HasSavedModel;
         var trainingOptions = TrainingProfileFactory.CreateOptions(TrainingProfileFactory.DefaultProfile) with
         {
-            ResumeSavedModel = shouldResumeModel
+            ResumeSavedModel = shouldResumeModel,
+            CaptureProgressSnapshots = _userWantsToWatch
         };
 
         try
@@ -694,18 +704,13 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        if (!HasTrainingCompletedInSession)
-        {
-            TrainingStatus = "Train in this session first, then run full excavation.";
-            return;
-        }
-
         if (IsFullExcavationRunning)
             return;
 
         IsFullExcavationRunning = true;
         ShowFullExcavationPrompt = false;
         _pendingFullExcavationLog = null;
+        _deferFullExcavationPromptUntilPlaybackEnds = false;
 
         int targetMinerals = GameMap.RemainingMinerals.Count;
         int startHours = EnsureValidDurationHours();
@@ -716,7 +721,46 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            TrainingStatus = $"Running full excavation search from {startHours}h mission window...";
+            string modelFile = SimulationRunner.ResolveModelPath(_modelPath) + ".qtable.json";
+            bool hasModelOnDisk = File.Exists(modelFile);
+            HasSavedModel = hasModelOnDisk;
+            if (!hasModelOnDisk)
+            {
+                // Full excavation can now run without manual training.
+                // If there is no saved policy, run a short warmup so the rover
+                // still starts from a competent model before the hour-window search.
+                int warmupEpisodes = Math.Clamp(Math.Max(300, targetMinerals * 20), 300, 2000);
+                TrainingStatus = $"No saved model found. Auto-training warmup ({warmupEpisodes} episodes) for full excavation...";
+                var warmupRunner = new SimulationRunner(GameMap.Clone(), startHours, _modelPath);
+                var warmupOptions = TrainingProfileFactory.CreateOptions(TrainingProfile.Balanced) with
+                {
+                    ResumeSavedModel = false,
+                    CaptureProgressSnapshots = false,
+                    ProfileName = "FullExcavationAutoWarmup"
+                };
+                int lastReportedEpisode = 0;
+                await Task.Run(() => warmupRunner.Train(
+                    episodes: warmupEpisodes,
+                    onProgress: p =>
+                    {
+                        if (p.Episode != warmupEpisodes
+                            && p.Episode - lastReportedEpisode < 25)
+                            return;
+                        lastReportedEpisode = p.Episode;
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (!IsFullExcavationRunning) return;
+                            TrainingStatus =
+                                $"Auto-training warmup... {p.Episode}/{warmupEpisodes} episodes | " +
+                                $"best={p.BestMinerals}";
+                        });
+                    },
+                    options: warmupOptions));
+                HasSavedModel = warmupRunner.HasSavedModel;
+                HasTrainingCompletedInSession = true;
+            }
+
+            TrainingStatus = $"Running full excavation search from {startHours}h mission window (best-effort fastest completion)...";
 
             for (int attempt = 1; attempt <= maxAttempts && currentHours <= maxHours; attempt++)
             {
@@ -731,16 +775,24 @@ public partial class MainViewModel : ObservableObject
                     break;
                 }
 
+                // Surface movement early so Full Excavation visibly starts.
+                if (attempt == 1)
+                {
+                    LoadReplayLogForPlayback(log, autoPlay: true);
+                    TrainingStatus = $"Full excavation attempt {attempt} running ({hoursForAttempt}h window)...";
+                }
+
                 int completionIndex = log.FindIndex(e => e.TotalMinerals >= targetMinerals);
                 if (completionIndex >= 0)
                 {
                     var completionEntry = log[completionIndex];
                     _pendingFullExcavationLog = log.Take(completionIndex + 1).ToList();
+                    LoadReplayLogForPlayback(_pendingFullExcavationLog, autoPlay: true);
                     FullExcavationSummary =
                         $"Full excavation finished in {completionEntry.Tick / 2.0:F1} hours " +
                         $"({completionEntry.Tick} ticks). Save this run to results/?";
-                    ShowFullExcavationPrompt = true;
-                    TrainingStatus = "Full excavation complete. Choose YES to save or NO to discard.";
+                    _deferFullExcavationPromptUntilPlaybackEnds = true;
+                    TrainingStatus = "Full excavation complete. Replaying winning run...";
                     return;
                 }
 
@@ -819,6 +871,7 @@ public partial class MainViewModel : ObservableObject
             HasTrainingCompletedInSession = false;
             ShowFullExcavationPrompt = false;
             _pendingFullExcavationLog = null;
+            _deferFullExcavationPromptUntilPlaybackEnds = false;
 
             GameMap  = loadedMap;
             _mapPath = path;
@@ -849,6 +902,7 @@ public partial class MainViewModel : ObservableObject
         _pendingCompletionStatus = null;
         _pendingResetDisplayToStart = false;
         _pendingFullExcavationLog = null;
+        _deferFullExcavationPromptUntilPlaybackEnds = false;
 
         StopReplayProcesses(clearLog: true, clearTrainingQueues: true);
         IsTraining = false;
@@ -864,6 +918,13 @@ public partial class MainViewModel : ObservableObject
         {
             _playbackTimer.Stop();
             IsRunning = false;
+            if (_deferFullExcavationPromptUntilPlaybackEnds && _pendingFullExcavationLog != null)
+            {
+                _deferFullExcavationPromptUntilPlaybackEnds = false;
+                ShowFullExcavationPrompt = true;
+                TrainingStatus = "Full excavation complete. Choose YES to save or NO to discard.";
+                return;
+            }
             TrainingStatus = "Simulation complete.";
             return;
         }
@@ -1228,10 +1289,30 @@ public partial class MainViewModel : ObservableObject
         return path;
     }
 
+    private void LoadReplayLogForPlayback(List<SimulationLogEntry> log, bool autoPlay)
+    {
+        _playbackTimer.Stop();
+        _ghostTimer.Stop();
+        IsRunning = false;
+        IsPaused = false;
+        IsGhostMode = false;
+        ShowGhostReplay = false;
+        ShowTrainingChart = false;
+
+        _log = log;
+        _playbackIndex = 0;
+        HasLog = log.Count > 0;
+        ResetDisplayToStart(clearTrainingQueues: false);
+
+        if (autoPlay && HasLog)
+            Play();
+    }
+
     private void ResetAfterFullExcavationPrompt()
     {
         ShowFullExcavationPrompt = false;
         _pendingFullExcavationLog = null;
+        _deferFullExcavationPromptUntilPlaybackEnds = false;
 
         StopReplayProcesses(clearLog: true, clearTrainingQueues: true);
         ResetDisplayToStart(clearTrainingQueues: false);

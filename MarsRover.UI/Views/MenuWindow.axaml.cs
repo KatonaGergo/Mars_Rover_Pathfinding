@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -45,6 +48,7 @@ public partial class MenuWindow : Window
     private TextBlock _onlineLabel = null!;
     private Control _onlineDot = null!;
     private Border _glitchLine = null!;
+    private Border _transitionGlowLayer = null!;
     private Border _settingsOverlay = null!;
     private CheckBox _fullscreenModeCheckBox = null!;
     private VideoView? _videoView;
@@ -88,6 +92,8 @@ public partial class MenuWindow : Window
             ?? throw new InvalidOperationException("OnlineDot not found.");
         _glitchLine = this.FindControl<Border>("GlitchLine")
             ?? throw new InvalidOperationException("GlitchLine not found.");
+        _transitionGlowLayer = this.FindControl<Border>("TransitionGlowLayer")
+            ?? throw new InvalidOperationException("TransitionGlowLayer not found.");
         _settingsOverlay = this.FindControl<Border>("SettingsOverlay")
             ?? throw new InvalidOperationException("SettingsOverlay not found.");
         _fullscreenModeCheckBox = this.FindControl<CheckBox>("FullscreenModeCheckBox")
@@ -462,18 +468,22 @@ public partial class MenuWindow : Window
             BeginMoveDrag(e);
     }
 
-    private void StartMission_OnClick(object? sender, RoutedEventArgs e)
+    private async void StartMission_OnClick(object? sender, RoutedEventArgs e)
     {
         var mainWindow = new MainWindow
         {
-            DataContext = new MainViewModel()
+            DataContext = new MainViewModel(),
+            Opacity = 0
         };
         UiDisplaySettings.ApplyTo(mainWindow);
+        CopyWindowGeometry(this, mainWindow);
 
         if (Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
             desktop.MainWindow = mainWindow;
 
         mainWindow.Show();
+        mainWindow.BeginAmbienceAfterTransition();
+        await CrossFadeWindowsAsync(this, mainWindow, _transitionGlowLayer, mainWindow.GetTransitionGlowForCrossFade());
         Close();
     }
 
@@ -548,8 +558,94 @@ public partial class MenuWindow : Window
             _musicPlayer.SetVolume(_musicVolume);
         }
     }
-   
 
+    private static async Task CrossFadeWindowsAsync(Window from, Window to, Border? fromGlow, Border? toGlow)
+    {
+        const int durationMs = 5460;
+        var tasks = new List<Task>
+        {
+            CreateOpacityAnimation(from.Opacity, 0, durationMs).RunAsync(from),
+            CreateOpacityAnimation(to.Opacity, 1, durationMs).RunAsync(to)
+        };
 
+        if (fromGlow is not null)
+        {
+            fromGlow.Opacity = 0;
+            tasks.Add(CreateGlowPulseAnimation(0.22, durationMs).RunAsync(fromGlow));
+        }
+
+        if (toGlow is not null)
+        {
+            toGlow.Opacity = 0;
+            tasks.Add(CreateGlowPulseAnimation(0.24, durationMs).RunAsync(toGlow));
+        }
+
+        await Task.WhenAll(tasks);
+    }
+
+    private static Animation CreateOpacityAnimation(double from, double to, int durationMs)
+    {
+        var animation = new Animation
+        {
+            Duration = TimeSpan.FromMilliseconds(durationMs),
+            FillMode = FillMode.Forward,
+            Easing = new SineEaseInOut()
+        };
+
+        animation.Children.Add(new KeyFrame
+        {
+            Cue = new Cue(0d),
+            Setters = { new Avalonia.Styling.Setter(OpacityProperty, from) }
+        });
+        animation.Children.Add(new KeyFrame
+        {
+            Cue = new Cue(1d),
+            Setters = { new Avalonia.Styling.Setter(OpacityProperty, to) }
+        });
+
+        return animation;
+    }
+
+    private static Animation CreateGlowPulseAnimation(double peakOpacity, int durationMs)
+    {
+        var animation = new Animation
+        {
+            Duration = TimeSpan.FromMilliseconds(durationMs),
+            FillMode = FillMode.Forward,
+            Easing = new SineEaseInOut()
+        };
+
+        animation.Children.Add(new KeyFrame
+        {
+            Cue = new Cue(0d),
+            Setters = { new Avalonia.Styling.Setter(OpacityProperty, 0d) }
+        });
+        animation.Children.Add(new KeyFrame
+        {
+            Cue = new Cue(0.42d),
+            Setters = { new Avalonia.Styling.Setter(OpacityProperty, peakOpacity) }
+        });
+        animation.Children.Add(new KeyFrame
+        {
+            Cue = new Cue(1d),
+            Setters = { new Avalonia.Styling.Setter(OpacityProperty, 0d) }
+        });
+
+        return animation;
+    }
+
+    private static void CopyWindowGeometry(Window source, Window target)
+    {
+        target.WindowState = source.WindowState;
+
+        if (source.WindowState == WindowState.Normal)
+        {
+            target.Position = source.Position;
+            target.Width = source.Width;
+            target.Height = source.Height;
+        }
+    }
+
+    internal Border GetTransitionGlowForCrossFade() => _transitionGlowLayer;
 }
 

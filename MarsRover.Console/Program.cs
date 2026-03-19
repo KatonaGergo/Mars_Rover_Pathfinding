@@ -190,7 +190,7 @@ static void PrintUsage()
     Console.WriteLine("  OPTIONS:");
     Console.WriteLine("    --map      <path>    Path to map CSV            (default: mars_map_50x50.csv)");
     Console.WriteLine("    --hours    <int>     Mission duration in hours  (default: 24)");
-    Console.WriteLine("    --episodes <int>     Training episode count     (default: 500)");
+    Console.WriteLine("    --episodes <int>     Training episode count     (default: 2000)");
     Console.WriteLine("    --model    <name>    Model file base name       (default: model)");
     Console.WriteLine("    --reset-model        Archive/delete current model files before continuing");
     Console.WriteLine("    --reset-model-delete Delete model files directly instead of archiving");

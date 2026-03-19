@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MarsRover.Console")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c2d04c3fe7f5964781c2df11158d001eb20f3d4e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+351f8a41eeb738a6f03be4cb64668d133a740610")]
 [assembly: System.Reflection.AssemblyProductAttribute("MarsRover.Console")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MarsRover.Console")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

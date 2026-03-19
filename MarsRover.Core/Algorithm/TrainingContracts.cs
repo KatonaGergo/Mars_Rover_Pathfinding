@@ -66,7 +66,8 @@ public record TrainingOptions(
     MissionEndMode MissionEndMode = MissionEndMode.ContinueUntilDeadline,
     string ProfileName = "default",
     int EpisodeSeedOffset = 0,
-    bool ResumeSavedModel = true);
+    bool ResumeSavedModel = true,
+    bool CaptureProgressSnapshots = false);
 
 public record TrainingOptionOverrides(
     bool? UseAdaptiveEpsilon = null,

@@ -65,3 +65,6 @@ C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj
 C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\refint\MarsRover.Core.dll
 C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\MarsRover.Core.pdb
 C:\Users\katona.gergo\Documents\GitHub\Mars_Rover_Pathfinding\MarsRover.Core\obj\Debug\net8.0\ref\MarsRover.Core.dll
+C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\tmp_build\Debug\net8.0\MarsRover.Core.deps.json
+C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\tmp_build\Debug\net8.0\MarsRover.Core.dll
+C:\Users\Dári Andrea\Desktop\Mars\Mars_Rover_Pathfinding\tmp_build\Debug\net8.0\MarsRover.Core.pdb

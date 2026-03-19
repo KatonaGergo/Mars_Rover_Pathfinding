@@ -8,6 +8,10 @@
         Title="MARS ROVER — Q-Learning Pathfinding Agent"
         Width="1400" Height="900"
         MinWidth="920" MinHeight="620"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="-1"
         Background="#050507"
         Icon="/Assets/logo.ico">
     <Window.Styles>
@@ -38,11 +42,12 @@
             <Setter Property="MaxHeight" Value="10"/>
         </Style>
     </Window.Styles>
-    <Grid ColumnDefinitions="3.4*,1.4*" RowDefinitions="Auto, *" Margin="10">
+    <Grid x:Name="MissionRootGrid" ColumnDefinitions="3.4*,1.4*" RowDefinitions="Auto, *" Margin="10">
         <!-- ═══════════════════════════════════════════════
              TOP BAR — Title + Controls
              ═══════════════════════════════════════════════ -->
-        <Border Grid.Row="0" Grid.ColumnSpan="2"
+        <Border x:Name="BootTopBar" Grid.Row="0" Grid.ColumnSpan="2"
+                PointerPressed="TopBar_OnPointerPressed"
                 Classes="panel" Margin="0,0,0,8">
             <Grid ColumnDefinitions="Auto,*">
                 <!-- Title + Team Logo -->
@@ -50,9 +55,9 @@
                     <Image Source="/Assets/logo.png" Width="48" Height="48"
                            VerticalAlignment="Center"/>
                     <StackPanel Orientation="Vertical" Spacing="2" VerticalAlignment="Center">
-                        <TextBlock Text="MARS ROVER" FontSize="22" FontWeight="Bold"
+                        <TextBlock x:Name="BootTitlePrimary" Text="MARS ROVER" FontSize="22" FontWeight="Bold"
                                    Foreground="#EF7E2A" LetterSpacing="4"/>
-                        <TextBlock Text="MISSION CONTROL DASHBOARD"
+                        <TextBlock x:Name="BootTitleSecondary" Text="MISSION CONTROL DASHBOARD"
                                    Classes="label" LetterSpacing="3"/>
                     </StackPanel>
                 </StackPanel>
@@ -149,10 +154,10 @@
 
              
 
-        <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="*,Auto" Margin="0,0,8,0" >
+        <Grid x:Name="BootLeftColumn" Grid.Row="1" Grid.Column="0" RowDefinitions="*,Auto" Margin="0,0,8,0" >
             <!-- MAP VIEW -->
           
-            <Border Classes="panel" Grid.Row="0" Padding="4"
+            <Border x:Name="BootMapPanel" Classes="panel" Grid.Row="0" Padding="4"
                     IsVisible="{Binding ShowMapView}">
                 <Grid RowDefinitions="Auto,*">
                     <Border Grid.Row="0" Padding="4,2" CornerRadius="3" Margin="0,0,0,4"
@@ -162,7 +167,7 @@
                                        FontWeight="Bold" FontSize="13" Foreground="#F6E8D6"/>
                             <TextBlock Grid.Column="1" Text="{Binding CurrentTime}"
                                        HorizontalAlignment="Center" Classes="label" FontSize="12"/>
-                            <TextBlock Grid.Column="2" Text="50×50 MAP"
+                            <TextBlock x:Name="BootMapLabel" Grid.Column="2" Text="50×50 MAP"
                                        Classes="label" FontSize="10" LetterSpacing="1"/>
                         </Grid>
                     </Border>
@@ -170,18 +175,31 @@
                         <!-- No-map placeholder -->
                         <Border IsVisible="{Binding !HasMapLoaded}"
                                 Background="#050507">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
-                                        Spacing="12">
-                                <TextBlock Text="🗺" FontSize="48"
-                                           HorizontalAlignment="Center"/>
-                                <TextBlock Text="NO MAP LOADED"
-                                           FontSize="16" FontWeight="Bold"
-                                           Foreground="#EF7E2A" LetterSpacing="3"
-                                           HorizontalAlignment="Center"/>
-                                <TextBlock Text="Click  LOAD MAP  to load a .txt or .csv map file"
-                                           FontSize="12" Foreground="#AA7E5D"
-                                           HorizontalAlignment="Center"/>
-                            </StackPanel>
+                            <Grid>
+                                <Image Source="avares://MarsRover.UI/Assets/MarsSurface.png"
+                                       Stretch="UniformToFill"
+                                       Opacity="0.42"/>
+                                <Border IsHitTestVisible="False" Opacity="0.52">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Offset="0" Color="#6B140A07"/>
+                                            <GradientStop Offset="1" Color="#B80D0604"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                            Spacing="12">
+                                    <TextBlock Text="🗺" FontSize="48"
+                                               HorizontalAlignment="Center"/>
+                                    <TextBlock Text="NO MAP LOADED"
+                                               FontSize="16" FontWeight="Bold"
+                                               Foreground="#EF7E2A" LetterSpacing="3"
+                                               HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Click  LOAD MAP  to load a .txt or .csv map file"
+                                               FontSize="12" Foreground="#E3AF85"
+                                               HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Grid>
                         </Border>
                         <!-- Map canvas -->
                         <Grid Grid.Row="1" IsVisible="{Binding HasMapLoaded}" ClipToBounds="True">
@@ -207,7 +225,7 @@
                 </Grid>
             </Border>
             <!-- GHOST REPLAY VIEW -->
-            <Border Classes="panel" Grid.Row="0" Padding="4"
+            <Border x:Name="BootGhostPanel" Classes="panel" Grid.Row="0" Padding="4"
                     IsVisible="{Binding ShowGhostReplay}">
                 <Grid RowDefinitions="Auto,*,Auto">
                     <!-- Header -->
@@ -288,7 +306,7 @@
                 </Grid>
             </Border>
             <!-- TRAINING CHART VIEW -->
-            <Border Classes="panel" Grid.Row="0" Padding="12"
+            <Border x:Name="BootChartPanel" Classes="panel" Grid.Row="0" Padding="12"
                     IsVisible="{Binding ShowTrainingChart}">
                 <Grid RowDefinitions="Auto,*,8,*,8,*">
                     <!-- Header -->
@@ -345,7 +363,7 @@
                 </Grid>
             </Border>
             <!-- Progress bar — training progress during training, mission progress otherwise -->
-            <Border Grid.Row="1" Classes="panel" Margin="0,8,0,0" Padding="8,6">
+            <Border x:Name="BootProgressPanel" Grid.Row="1" Classes="panel" Margin="0,8,0,0" Padding="8,6">
                 <Grid ColumnDefinitions="Auto,*,Auto">
                     <!-- Mission progress (shown when not training) -->
                     <TextBlock Grid.Column="0" Classes="label" VerticalAlignment="Center"
@@ -373,13 +391,13 @@
         <!-- ═══════════════════════════════════════════════
              RIGHT — two modes: Training / Mission
              ═══════════════════════════════════════════════ -->
-        <Grid Grid.Row="1" Grid.Column="1" MinWidth="300">
+        <Grid x:Name="BootRightColumn" Grid.Row="1" Grid.Column="1" MinWidth="300">
             <Panel>
                 <!-- ══ TRAINING MODE PANEL ══════════════════════ -->
                 <Grid RowDefinitions="Auto,*"
                       IsVisible="{Binding IsTraining}">
                     <!-- System status + progress -->
-                    <Border Grid.Row="0" Classes="panel" Margin="0,0,0,8">
+                    <Border x:Name="BootTrainingStatusPanel" Grid.Row="0" Classes="panel" Margin="0,0,0,8">
                         <StackPanel Spacing="6">
                             <TextBlock Text="SYSTEM STATUS" Classes="header"/>
                             <TextBlock Text="{Binding TrainingStatus}"
@@ -391,7 +409,7 @@
                         </StackPanel>
                     </Border>
                     <!-- Training curve charts (fill remaining height) -->
-                    <Border Grid.Row="1" Classes="panel">
+                    <Border x:Name="BootTrainingCurvesPanel" Grid.Row="1" Classes="panel">
                         <Grid RowDefinitions="Auto,*,8,*,8,*">
                             <StackPanel Grid.Row="0" Margin="0,0,0,6">
                                 <TextBlock Text="TRAINING CURVE" FontSize="15" FontWeight="Bold"
@@ -424,7 +442,7 @@
                 <Grid RowDefinitions="Auto,Auto,Auto,*"
                       IsVisible="{Binding !IsTraining}">
                     <!-- System status -->
-                    <Border Grid.Row="0" Classes="panel" Margin="0,0,0,8">
+                    <Border x:Name="BootMissionStatusPanel" Grid.Row="0" Classes="panel" Margin="0,0,0,8">
                         <StackPanel Spacing="6">
                             <TextBlock Text="SYSTEM STATUS" Classes="header"/>
                             <TextBlock Text="{Binding TrainingStatus}"
@@ -433,7 +451,7 @@
                         </StackPanel>
                     </Border>
                     <!-- Rover telemetry -->
-                    <Border Grid.Row="1" Classes="panel" Margin="0,0,0,8">
+                    <Border x:Name="BootTelemetryPanel" Grid.Row="1" Classes="panel" Margin="0,0,0,8">
                         <StackPanel Spacing="8">
                             <TextBlock Text="ROVER TELEMETRY" Classes="header"/>
                             <Grid ColumnDefinitions="*,*" Margin="0,0,0,2">
@@ -482,7 +500,7 @@
                         </StackPanel>
                     </Border>
                     <!-- Mineral counters -->
-                    <Border Grid.Row="2" Classes="panel" Margin="0,0,0,8">
+                    <Border x:Name="BootMineralsPanel" Grid.Row="2" Classes="panel" Margin="0,0,0,8">
                         <StackPanel Spacing="6">
                             <TextBlock Text="MINERALS COLLECTED" Classes="header"/>
                             <Grid ColumnDefinitions="*,*,*">
@@ -515,7 +533,7 @@
                         </StackPanel>
                     </Border>
                     <!-- Event log (expanded to fill freed space) -->
-                    <Border Grid.Row="3" Classes="panel">
+                    <Border x:Name="BootEventLogPanel" Grid.Row="3" Classes="panel">
                         <Grid RowDefinitions="Auto,*">
                             <TextBlock Grid.Row="0" Text="EVENT LOG" Classes="header"/>
                             <ScrollViewer Grid.Row="1" Margin="0,6,0,0">
@@ -534,6 +552,21 @@
                 </Grid>
             </Panel>
         </Grid>
+
+        <Border x:Name="TransitionGlowLayer"
+                Grid.Row="0" Grid.RowSpan="2"
+                Grid.Column="0" Grid.ColumnSpan="2"
+                IsHitTestVisible="False"
+                Opacity="0"
+                ZIndex="80">
+            <Border.Background>
+                <RadialGradientBrush Center="0.5,0.42" Radius="0.95">
+                    <GradientStop Offset="0" Color="#5CFF8C2A"/>
+                    <GradientStop Offset="1" Color="#001A0702"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
         <!-- ═══════════════════════════════════════════════
              REPLAY MODE POPUP OVERLAY
              ═══════════════════════════════════════════════ -->
@@ -549,12 +582,15 @@
                                LetterSpacing="3"/>
                     <TextBlock TextWrapping="Wrap" FontSize="13" Foreground="#E6B386"
                                HorizontalAlignment="Center" TextAlignment="Center"
-                               Text="Choose how training replay should run.&#x0a;Fast mode averages chart updates; step-by-step shows every episode."/>
-                    <Grid ColumnDefinitions="*,12,*" Margin="0,8,0,0">
-                        <Button Grid.Column="0" Content="FAST REPLAY"
+                               Text="Choose how training replay should run.&#x0a;No replay is fastest. Fast replay averages updates; step-by-step shows every episode."/>
+                    <Grid ColumnDefinitions="*,12,*,12,*" Margin="0,8,0,0">
+                        <Button Grid.Column="0" Content="NO REPLAY (FASTEST)"
                                 Classes="primary" HorizontalAlignment="Stretch"
+                                Command="{Binding StartNoReplayCommand}"/>
+                        <Button Grid.Column="2" Content="FAST REPLAY"
+                                Classes="secondary" HorizontalAlignment="Stretch"
                                 Command="{Binding StartFastReplayCommand}"/>
-                        <Button Grid.Column="2" Content="STEP-BY-STEP"
+                        <Button Grid.Column="4" Content="STEP-BY-STEP"
                                 Classes="secondary" HorizontalAlignment="Stretch"
                                 Command="{Binding StartStepByStepReplayCommand}"/>
                     </Grid>

@@ -7,3 +7,28 @@ _temp_build/
 .vscode/
 .cursor/
 .dotnet/
+
+# Build artifacts / binaries / debug symbols
+*.dll
+*.pdb
+*.exe
+*.apphost.exe
+*.deps.json
+*.runtimeconfig.json
+*.sourcelink.json
+
+# Generated caches / restores / tool output
+*.cache
+*.assets.cache
+*.genruntimeconfig.cache
+*.csproj.nuget.dgspec.json
+*.csproj.nuget.g.props
+*.nuget.dgspec.json
+*.nuget.g.props
+project.assets.json
+*.FileListAbsolute.txt
+
+# Local/user/editor noise
+*.user
+*.suo
+*.log

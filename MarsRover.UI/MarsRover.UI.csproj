@@ -39,6 +39,15 @@
     <AvaloniaResource Update="Assets\BackgroundMusic.mp3">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </AvaloniaResource>
+    <AvaloniaResource Update="Assets\MainScreenSound (FROM GTA Online).mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </AvaloniaResource>
+    <AvaloniaResource Update="Assets\WhiteNoiseSpace.m4a">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </AvaloniaResource>
+    <AvaloniaResource Update="Assets\SoundFXs\*.mkv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </AvaloniaResource>
   </ItemGroup>
 
 </Project>

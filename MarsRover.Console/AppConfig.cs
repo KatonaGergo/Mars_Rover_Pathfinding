@@ -22,7 +22,7 @@ public class AppConfig
     public int    Hours      { get; set; } = 48;
 
     [JsonPropertyName("episodes")]
-    public int    Episodes   { get; set; } = 500;
+    public int    Episodes   { get; set; } = 2000;
 
     [JsonPropertyName("modelPath")]
     public string ModelPath  { get; set; } = "model";
