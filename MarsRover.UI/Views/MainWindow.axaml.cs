@@ -272,8 +272,8 @@ public partial class MainWindow : Window
             _whiteNoiseAudioMedia = new Media(_audioLibVlc, new Uri(_whiteNoiseSpacePath));
             _whiteNoiseAudioMedia.AddOption(":input-repeat=-1");
 
-            _mainScreenAudioPlayer.Volume = 100;
-            _whiteNoiseAudioPlayer.Volume = 100;
+            _mainScreenAudioPlayer.Volume = 60;
+            _whiteNoiseAudioPlayer.Volume = 50;
 
             _mainScreenAudioPlayer.Play(_mainScreenAudioMedia);
             _whiteNoiseAudioPlayer.Play(_whiteNoiseAudioMedia);
