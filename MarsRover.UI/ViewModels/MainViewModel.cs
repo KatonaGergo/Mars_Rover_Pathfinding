@@ -64,6 +64,15 @@ public partial class MainViewModel : ObservableObject
     public bool HasReplayData => HasLog || (GhostTrail?.Count > 0);
     public bool CanRunFullExcavation => HasMapLoaded && !IsTraining && !IsFullExcavationRunning;
     public string PauseButtonContent => IsPaused ? "▶" : "⏸";
+        [ObservableProperty] private bool _showMineralsFoundPrompt = false;
+    [ObservableProperty] private int _mineralsFoundCountdown = 0;
+    [ObservableProperty] private double _mapTileRevealProgress = 1.0;
+    [ObservableProperty] private bool _isMapLoadScanOverlayVisible = false;
+    [ObservableProperty] private int _mapLoadScannerJumpTrigger = 0;
+    [ObservableProperty] private bool _isMapScannerTargetActive = false;
+    [ObservableProperty] private bool _isMapScannerHudVisible = false;
+    public bool IsMineralsFoundPromptVisible => ShowMineralsFoundPrompt;
+    public string MineralsFoundCountdownText => Math.Max(MineralsFoundCountdown, 0).ToString();
     private string _modelPath = "q_table"; // base path — runner appends .weights.json / .meta.json
     private string _mapPath   = "";           // stored on map load — used for run log
     [ObservableProperty] private bool _hasSavedModel = false;
@@ -97,7 +106,14 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isGhostMode  = false;
     [ObservableProperty] private string _ghostStatus = "";
 
-    private DispatcherTimer _ghostTimer = new();
+        private DispatcherTimer _ghostTimer = new();
+    private readonly DispatcherTimer _mineralsFoundCountdownTimer = new();
+    private readonly DispatcherTimer _mineralsFoundHideTimer = new();
+    private readonly DispatcherTimer _mapRevealTimer = new();
+    private DateTime _mapRevealStartedAtUtc;
+    private static readonly TimeSpan MineralsFoundHideDelay = TimeSpan.FromMilliseconds(820);
+    private static readonly TimeSpan MapRevealDuration = TimeSpan.FromSeconds(5.8);
+    private const double HideScannerHudAtRevealProgress = 0.05;
 
     // ── View toggle ───────────────────────────────────────────────────────────
     [ObservableProperty] private bool _showTrainingChart = false;
@@ -110,8 +126,25 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnShowTrainingChartChanged(bool value) => OnPropertyChanged(nameof(ShowMapView));
     partial void OnShowGhostReplayChanged(bool value)   => OnPropertyChanged(nameof(ShowMapView));
+        partial void OnShowMineralsFoundPromptChanged(bool value) => OnPropertyChanged(nameof(IsMineralsFoundPromptVisible));
+    partial void OnMineralsFoundCountdownChanged(int value) => OnPropertyChanged(nameof(MineralsFoundCountdownText));
     partial void OnGameMapChanged(GameMap? value)
     {
+        if (value == null)
+        {
+            StopMineralsFoundPrompt();
+            StopMapLoadRevealSequence(resetRevealToFull: false);
+            IsMapLoadScanOverlayVisible = false;
+            IsMapScannerTargetActive = false;
+            IsMapScannerHudVisible = false;
+            MapLoadScannerJumpTrigger = 0;
+        }
+        else
+        {
+            IsMapLoadScanOverlayVisible = true;
+            IsMapScannerHudVisible = true;
+        }
+
         OnPropertyChanged(nameof(HasMapLoaded));
         OnPropertyChanged(nameof(CanRunFullExcavation));
     }
@@ -199,6 +232,15 @@ public partial class MainViewModel : ObservableObject
         // Ghost replay timer — fast, plays one step per tick
         _ghostTimer          = new DispatcherTimer();
         _ghostTimer.Tick    += OnGhostTick;
+
+                _mineralsFoundCountdownTimer.Interval = TimeSpan.FromSeconds(1);
+        _mineralsFoundCountdownTimer.Tick += OnMineralsFoundCountdownTick;
+
+        _mineralsFoundHideTimer.Interval = MineralsFoundHideDelay;
+        _mineralsFoundHideTimer.Tick += (_, _) => StopMineralsFoundPrompt();
+
+        _mapRevealTimer.Interval = TimeSpan.FromMilliseconds(16);
+        _mapRevealTimer.Tick += OnMapRevealTick;
 
         UpdateTimerInterval();
 
@@ -857,6 +899,8 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var loadedMap = MarsRover.Core.Simulation.GameMap.LoadFromFile(path);
+            StopMineralsFoundPrompt();
+            StopMapLoadRevealSequence(resetRevealToFull: false);
             _isNavigatingAway = true;
             _runGeneration++;
             _userWantsToWatch = false;
@@ -880,11 +924,20 @@ public partial class MainViewModel : ObservableObject
             TrainingStatus = $"Map loaded — {System.IO.Path.GetFileName(path)} " +
                              $"| {GameMap.RemainingMinerals.Count} minerals";
             ResetDisplayToStart();
+            MapTileRevealProgress = 0;
+            IsMapScannerTargetActive = true;
+            IsMapScannerHudVisible = true;
+            MapLoadScannerJumpTrigger = 0;
+            IsMapLoadScanOverlayVisible = true;
+            MapLoadScannerJumpTrigger++;
+            StartMineralsFoundPrompt();
             _isNavigatingAway = false;
         }
         catch (Exception ex)
         {
             TrainingStatus = $"Failed to load map: {ex.Message}";
+            StopMineralsFoundPrompt();
+            StopMapLoadRevealSequence(resetRevealToFull: false);
             _isNavigatingAway = false;
         }
     }
@@ -899,6 +952,8 @@ public partial class MainViewModel : ObservableObject
         _userWantsToWatch = false;
         ShowWatchPrompt = false;
         ShowFullExcavationPrompt = false;
+        StopMineralsFoundPrompt();
+        StopMapLoadRevealSequence(resetRevealToFull: true);
         _pendingCompletionStatus = null;
         _pendingResetDisplayToStart = false;
         _pendingFullExcavationLog = null;
@@ -1227,6 +1282,73 @@ public partial class MainViewModel : ObservableObject
         }));
     }
 
+    private void StartMapLoadRevealSequence()
+    {
+        _mapRevealTimer.Stop();
+        _mapRevealStartedAtUtc = DateTime.UtcNow;
+        _mapRevealTimer.Start();
+    }
+
+    private void StopMapLoadRevealSequence(bool resetRevealToFull)
+    {
+        _mapRevealTimer.Stop();
+        if (resetRevealToFull)
+            MapTileRevealProgress = 1.0;
+    }
+
+    private void OnMapRevealTick(object? sender, EventArgs e)
+    {
+        if (!HasMapLoaded)
+        {
+            StopMapLoadRevealSequence(resetRevealToFull: false);
+            return;
+        }
+
+        var elapsed = DateTime.UtcNow - _mapRevealStartedAtUtc;
+        double progress = Math.Clamp(elapsed.TotalSeconds / MapRevealDuration.TotalSeconds, 0.0, 1.0);
+        MapTileRevealProgress = progress;
+
+        if (IsMapScannerHudVisible && progress >= HideScannerHudAtRevealProgress)
+        {
+            IsMapScannerHudVisible = false;
+        }
+
+        if (progress >= 1.0)
+            _mapRevealTimer.Stop();
+    }
+
+    private void StartMineralsFoundPrompt()
+    {
+        _mineralsFoundHideTimer.Stop();
+        _mineralsFoundCountdownTimer.Stop();
+        ShowMineralsFoundPrompt = true;
+        MineralsFoundCountdown = 3;
+        _mineralsFoundCountdownTimer.Start();
+    }
+
+    private void OnMineralsFoundCountdownTick(object? sender, EventArgs e)
+    {
+        if (MineralsFoundCountdown > 0)
+            MineralsFoundCountdown--;
+
+        if (MineralsFoundCountdown > 0)
+            return;
+
+        _mineralsFoundCountdownTimer.Stop();
+
+        // Countdown finished: map cells start appearing while the scanner stays locked.
+        StartMapLoadRevealSequence();
+
+        _mineralsFoundHideTimer.Start();
+    }
+
+    private void StopMineralsFoundPrompt()
+    {
+        _mineralsFoundCountdownTimer.Stop();
+        _mineralsFoundHideTimer.Stop();
+        ShowMineralsFoundPrompt = false;
+        MineralsFoundCountdown = 0;
+    }
     // ── Helpers ───────────────────────────────────────────────────────────────
 
 
@@ -1293,6 +1415,7 @@ public partial class MainViewModel : ObservableObject
     {
         _playbackTimer.Stop();
         _ghostTimer.Stop();
+        StopMapLoadRevealSequence(resetRevealToFull: true);
         IsRunning = false;
         IsPaused = false;
         IsGhostMode = false;
@@ -1326,6 +1449,7 @@ public partial class MainViewModel : ObservableObject
         _replayGeneration++;
         _playbackTimer.Stop();
         _ghostTimer.Stop();
+        StopMapLoadRevealSequence(resetRevealToFull: true);
         _playbackIndex = 0;
         IsRunning      = false;
         IsPaused       = false;
@@ -1375,6 +1499,9 @@ public partial class MainViewModel : ObservableObject
         _batteryPoints.Clear();
         _mineralPoints.Clear();
         EventLog.Clear();
+
+        if (!IsMapLoadScanOverlayVisible)
+            MapTileRevealProgress = 1.0;
 
         if (GameMap != null)
         {

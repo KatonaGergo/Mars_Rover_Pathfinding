@@ -175,51 +175,71 @@
                         <!-- No-map placeholder -->
                         <Border IsVisible="{Binding !HasMapLoaded}"
                                 Background="#050507">
-                            <Grid>
-                                <Image Source="avares://MarsRover.UI/Assets/MarsSurface.png"
-                                       Stretch="UniformToFill"
-                                       Opacity="0.42"/>
-                                <Border IsHitTestVisible="False" Opacity="0.52">
-                                    <Border.Background>
-                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                            <GradientStop Offset="0" Color="#6B140A07"/>
-                                            <GradientStop Offset="1" Color="#B80D0604"/>
-                                        </LinearGradientBrush>
-                                    </Border.Background>
-                                </Border>
-                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
-                                            Spacing="12">
-                                    <TextBlock Text="🗺" FontSize="48"
-                                               HorizontalAlignment="Center"/>
-                                    <TextBlock Text="NO MAP LOADED"
-                                               FontSize="16" FontWeight="Bold"
+                            <Grid ClipToBounds="True">
+                                <controls:SurfaceScannerCanvas IsActive="{Binding !HasMapLoaded}" IsTargetActive="False"/>
+                                <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top"
+                                            Margin="16,16,0,0" Spacing="4">
+                                    <TextBlock Text="ORBITAL SCAN MODE"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               Foreground="#F5C08D" LetterSpacing="2"/>
+                                    <TextBlock Text="Recon sweep active"
+                                               Classes="label" FontSize="10"
+                                               Foreground="#E29D68"/>
+                                </StackPanel>
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                            Margin="0,0,0,18" Spacing="8">
+                                    <TextBlock Text="SEARCHING FOR MINERALS"
+                                               FontSize="15" FontWeight="Bold"
                                                Foreground="#EF7E2A" LetterSpacing="3"
                                                HorizontalAlignment="Center"/>
-                                    <TextBlock Text="Click  LOAD MAP  to load a .txt or .csv map file"
-                                               FontSize="12" Foreground="#E3AF85"
+                                    <TextBlock Text="Load a mission map to lock target coordinates"
+                                               FontSize="11" Foreground="#F0C39B"
                                                HorizontalAlignment="Center"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
                         <!-- Map canvas -->
                         <Grid Grid.Row="1" IsVisible="{Binding HasMapLoaded}" ClipToBounds="True">
-                            <Image Source="avares://MarsRover.UI/Assets/MarsSurface.png"
-                                   Stretch="UniformToFill"
-                                   Opacity="0.54"/>
-                            <Border IsHitTestVisible="False" Opacity="0.32">
-                                <Border.Background>
-                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                        <GradientStop Offset="0" Color="#5A1E1009"/>
-                                        <GradientStop Offset="1" Color="#A1160B06"/>
-                                    </LinearGradientBrush>
-                                </Border.Background>
-                            </Border>
+                            <Border Background="#050507"/>
+                            <controls:SurfaceScannerCanvas
+                                IsVisible="{Binding IsMapLoadScanOverlayVisible}"
+                                IsActive="True"
+                                ShowHud="{Binding IsMapScannerHudVisible}"
+                                JumpTrigger="{Binding MapLoadScannerJumpTrigger}"
+                                IsTargetActive="{Binding IsMapScannerTargetActive}"/>
                             <controls:MapCanvas
                                 IsVisible="{Binding HasMapLoaded}"
                                 GameMap="{Binding GameMap}"
                                 RoverX="{Binding RoverX}"
                                 RoverY="{Binding RoverY}"
-                                IsNight="{Binding IsNight}"/>
+                                IsNight="{Binding IsNight}"
+                                TileRevealProgress="{Binding MapTileRevealProgress}"/>
+                            <Border IsVisible="{Binding IsMineralsFoundPromptVisible}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Top"
+                                    Margin="0,16,0,0"
+                                    CornerRadius="3"
+                                    BorderBrush="#B7FF2E2A"
+                                    BorderThickness="1.3"
+                                    IsHitTestVisible="False">
+                                <StackPanel Orientation="Vertical" Spacing="0">
+                                    <Border Background="#8C2A0000" Padding="18,4,18,4">
+                                        <TextBlock Text="MINERALS FOUND"
+                                                   FontSize="12"
+                                                   FontWeight="Bold"
+                                                   Foreground="#FFB14848"
+                                                   LetterSpacing="3"
+                                                   HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <Border Background="#EAFF1E1E" Padding="18,4,18,4">
+                                        <TextBlock Text="{Binding MineralsFoundCountdownText}"
+                                                   FontSize="36"
+                                                   FontWeight="Bold"
+                                                   Foreground="#FF130909"
+                                                   HorizontalAlignment="Center"/>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
                         </Grid>
                     </Panel>
                 </Grid>
