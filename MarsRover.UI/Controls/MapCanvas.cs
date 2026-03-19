@@ -85,7 +85,7 @@ public class MapCanvas : Control
     private readonly Bitmap _mineralB = new Bitmap(AssetLoader.Open(new Uri("avares://MarsRover.UI/Assets/Models/kekasvany.png")));
     private readonly Bitmap _mineralY = new Bitmap(AssetLoader.Open(new Uri("avares://MarsRover.UI/Assets/Models/sargaasvany.png")));
     private readonly Bitmap _mineralG = new Bitmap(AssetLoader.Open(new Uri("avares://MarsRover.UI/Assets/Models/zoldasvany.png")));
-    private readonly Bitmap _rover = new Bitmap(AssetLoader.Open(new Uri("avares://MarsRover.UI/Assets/Models/rover.png")));
+    private readonly Bitmap _rover = new Bitmap(AssetLoader.Open(new Uri("avares://MarsRover.UI/Assets/Models/rover2.png")));
 
 
 
