@@ -8,31 +8,31 @@ namespace MarsRover.Core.Algorithm;
 /// Architecture: [inputSize] → [hidden1] → [hidden2] → [outputSize]
 /// Activation: ReLU on hidden layers, linear on output (Q-values can be negative)
 ///
-/// WHY FROM SCRATCH (no ML.NET / TensorFlow):
-///   - No extra NuGet dependency (keeps the project portable)
-///   - Full control over weight initialisation, update rule, cloning for target net
-///   - The network is tiny (6→64→64→4) so performance is not a concern
+/// This implementation is intentionally lightweight (no ML.NET / TensorFlow):
+///   - no extra NuGet dependency, so the project stays portable
+///   - full control over initialization, updates, and target-net cloning
+///   - the network is small enough that a custom implementation is practical
 ///
-/// WEIGHT INIT: He initialisation — var = 2/fan_in — optimal for ReLU nets.
-/// UPDATE RULE: Mini-batch gradient descent with MSE loss on Q-values.
+/// Weight initialization uses He init (var = 2/fan_in).
+/// Training uses mini-batch gradient descent with MSE on Q-values.
 /// </summary>
 public class NeuralNetwork
 {
-    // ── Architecture ──────────────────────────────────────────────────────────
+    // Architecture
     public  int InputSize  { get; }
     public  int OutputSize { get; }
     private readonly int[] _layerSizes; // [input, hidden1, hidden2, output]
 
-    // ── Weights and biases  [layer][neuron_out][neuron_in] ────────────────────
+    // Weights and biases  [layer][neuron_out][neuron_in]
     private double[][][] _weights; // _weights[l][j][i] = w from i→j in layer l
     private double[][]   _biases;  // _biases[l][j]
 
-    // ── Hyperparameters ───────────────────────────────────────────────────────
+    // Hyperparameters
     public double LearningRate { get; set; } = 0.001;
 
     private readonly Random _rng;
 
-    // ─────────────────────────────────────────────────────────────────────────
+
 
     public NeuralNetwork(int inputSize, int hidden1, int hidden2, int outputSize, int seed = 42)
     {
@@ -55,7 +55,7 @@ public class NeuralNetwork
         _rng        = new Random(0);
     }
 
-    // ── Initialisation ────────────────────────────────────────────────────────
+    // Initialisation
 
     private void InitWeights()
     {
@@ -82,7 +82,7 @@ public class NeuralNetwork
         }
     }
 
-    // ── Forward pass ─────────────────────────────────────────────────────────
+    // Forward pass
 
     /// <summary>
     /// Runs a forward pass and returns Q-values for all actions.
@@ -112,7 +112,7 @@ public class NeuralNetwork
         return activation; // Q-values
     }
 
-    // ── Backward pass (mini-batch SGD) ────────────────────────────────────────
+    // Backward pass (mini-batch SGD)
 
     /// <summary>
     /// Updates weights given a batch of (input, targetQValues) pairs.
@@ -140,7 +140,7 @@ public class NeuralNetwork
 
         for (int b = 0; b < batch; b++)
         {
-            // ── Forward pass, storing activations and pre-activations ──────────
+            // Forward pass, storing activations and pre-activations
             var activations = new double[layers + 1][];
             var preActs     = new double[layers][];
             activations[0]  = inputs[b];
@@ -161,7 +161,7 @@ public class NeuralNetwork
                 }
             }
 
-            // ── Output layer delta: MSE loss, only on the action taken ─────────
+            // Output layer delta: MSE loss, only on the action taken
             int    actionIdx = actionIndices[b];
             var    delta     = new double[layers][];
             delta[layers-1]  = new double[_weights[layers-1].Length];
@@ -174,7 +174,7 @@ public class NeuralNetwork
                 // else stays 0
             }
 
-            // ── Hidden layer deltas (backprop through ReLU) ────────────────────
+            // Hidden layer deltas (backprop through ReLU)
             for (int l = layers - 2; l >= 0; l--)
             {
                 delta[l] = new double[_weights[l].Length];
@@ -190,7 +190,7 @@ public class NeuralNetwork
                 }
             }
 
-            // ── Accumulate gradients ──────────────────────────────────────────
+            // Accumulate gradients
             for (int l = 0; l < layers; l++)
             {
                 for (int j = 0; j < _weights[l].Length; j++)
@@ -202,7 +202,7 @@ public class NeuralNetwork
             }
         }
 
-        // ── Apply averaged gradient update ────────────────────────────────────
+        // Apply averaged gradient update
         double scale = LearningRate / batch;
         for (int l = 0; l < layers; l++)
             for (int j = 0; j < _weights[l].Length; j++)
@@ -213,7 +213,7 @@ public class NeuralNetwork
             }
     }
 
-    // ── Target network support ────────────────────────────────────────────────
+    // Target network support
 
     /// <summary>
     /// Returns a deep copy of this network — used to create the frozen target net.
@@ -252,7 +252,7 @@ public class NeuralNetwork
             }
     }
 
-    // ── Serialisation ─────────────────────────────────────────────────────────
+    // Serialisation
 
     public void Save(string path)
     {
@@ -275,7 +275,7 @@ public class NeuralNetwork
 
     public bool FileExists(string path) => File.Exists(path);
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
     private double SampleGaussian()
     {
@@ -285,7 +285,7 @@ public class NeuralNetwork
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
     }
 
-    // ── DTO for JSON serialisation ────────────────────────────────────────────
+    // DTO for JSON serialisation
     private class NetworkDto
     {
         public int[]?       LayerSizes { get; set; }

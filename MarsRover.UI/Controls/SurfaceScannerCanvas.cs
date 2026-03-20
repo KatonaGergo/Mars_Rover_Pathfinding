@@ -36,6 +36,18 @@ public class SurfaceScannerCanvas : Control
     public static readonly StyledProperty<bool> UseSharedLockedViewProperty =
         AvaloniaProperty.Register<SurfaceScannerCanvas, bool>(nameof(UseSharedLockedView), false);
 
+    public static readonly StyledProperty<bool> UseExternalCameraProperty =
+        AvaloniaProperty.Register<SurfaceScannerCanvas, bool>(nameof(UseExternalCamera), false);
+
+    public static readonly StyledProperty<double> ExternalCameraCenterXProperty =
+        AvaloniaProperty.Register<SurfaceScannerCanvas, double>(nameof(ExternalCameraCenterX), 0.5);
+
+    public static readonly StyledProperty<double> ExternalCameraCenterYProperty =
+        AvaloniaProperty.Register<SurfaceScannerCanvas, double>(nameof(ExternalCameraCenterY), 0.5);
+
+    public static readonly StyledProperty<double> ExternalCameraZoomProperty =
+        AvaloniaProperty.Register<SurfaceScannerCanvas, double>(nameof(ExternalCameraZoom), 1.0);
+
     private static readonly Uri ScannerMapUri =
         new("avares://MarsRover.UI/Assets/MarsSurfaceScannerMap.png");
 
@@ -109,6 +121,14 @@ public class SurfaceScannerCanvas : Control
             control.HandleLoadFxStateChanged());
         UseSharedLockedViewProperty.Changed.AddClassHandler<SurfaceScannerCanvas>((control, _) =>
             control.HandleUseSharedLockedViewChanged());
+        UseExternalCameraProperty.Changed.AddClassHandler<SurfaceScannerCanvas>((control, _) =>
+            control.InvalidateVisual());
+        ExternalCameraCenterXProperty.Changed.AddClassHandler<SurfaceScannerCanvas>((control, _) =>
+            control.InvalidateVisual());
+        ExternalCameraCenterYProperty.Changed.AddClassHandler<SurfaceScannerCanvas>((control, _) =>
+            control.InvalidateVisual());
+        ExternalCameraZoomProperty.Changed.AddClassHandler<SurfaceScannerCanvas>((control, _) =>
+            control.InvalidateVisual());
     }
 
     public SurfaceScannerCanvas()
@@ -163,6 +183,30 @@ public class SurfaceScannerCanvas : Control
     {
         get => GetValue(UseSharedLockedViewProperty);
         set => SetValue(UseSharedLockedViewProperty, value);
+    }
+
+    public bool UseExternalCamera
+    {
+        get => GetValue(UseExternalCameraProperty);
+        set => SetValue(UseExternalCameraProperty, value);
+    }
+
+    public double ExternalCameraCenterX
+    {
+        get => GetValue(ExternalCameraCenterXProperty);
+        set => SetValue(ExternalCameraCenterXProperty, value);
+    }
+
+    public double ExternalCameraCenterY
+    {
+        get => GetValue(ExternalCameraCenterYProperty);
+        set => SetValue(ExternalCameraCenterYProperty, value);
+    }
+
+    public double ExternalCameraZoom
+    {
+        get => GetValue(ExternalCameraZoomProperty);
+        set => SetValue(ExternalCameraZoomProperty, value);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -497,7 +541,12 @@ public class SurfaceScannerCanvas : Control
 
         Point center = _currentCenter;
         double zoom = _currentZoom;
-        if (UseSharedLockedView && _hasSharedLockedView)
+        if (UseExternalCamera)
+        {
+            center = new Point(ClampUnit(ExternalCameraCenterX), ClampUnit(ExternalCameraCenterY));
+            zoom = ClampExternalZoom(ExternalCameraZoom);
+        }
+        else if (UseSharedLockedView && _hasSharedLockedView)
         {
             center = _sharedLockedCenter;
             zoom = _sharedLockedZoom;
@@ -773,6 +822,20 @@ public class SurfaceScannerCanvas : Control
 
     private static double Lerp(double from, double to, double t)
         => from + ((to - from) * t);
+
+    private static double ClampUnit(double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return 0.5;
+        return Math.Clamp(value, 0.0, 1.0);
+    }
+
+    private static double ClampExternalZoom(double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return 1.0;
+        return Math.Clamp(value, 1.0, 2.6);
+    }
 
     private static double EaseInOutCubic(double t)
         => t < 0.5

@@ -43,7 +43,7 @@ public class SimulationEngine
         _tick        = 0;
     }
 
-    // ── State snapshot ───────────────────────────────────────────────────────
+    // State snapshot
 
     public RoverState GetState() => new(
         _x, _y, _battery, _tick,
@@ -51,7 +51,7 @@ public class SimulationEngine
         _isMining, RoverAction.StandbyAction
     );
 
-    // ── Core tick ────────────────────────────────────────────────────────────
+    // Core tick
 
     /// <summary>
     /// Advances the simulation by one half-hour tick.
@@ -104,7 +104,7 @@ public class SimulationEngine
         );
     }
 
-    // ── Action executors ─────────────────────────────────────────────────────
+    // Action executors
 
     private string ExecuteMove(IReadOnlyList<Direction> dirs, RoverSpeed speed, bool isDay)
     {
@@ -119,7 +119,7 @@ public class SimulationEngine
             return "Move — no directions";
 
         // Execute each direction step in sequence.
-        // FREE MOVEMENT: each step can be a different direction.
+        // In the free-movement model, each step can be a different direction.
         int moved  = 0;
         int finalX = _x;
         int finalY = _y;
@@ -172,7 +172,7 @@ public class SimulationEngine
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
     public static bool IsDay(int tick)
     {

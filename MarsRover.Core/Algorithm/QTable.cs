@@ -19,13 +19,13 @@ public class QTable
 
     private readonly Dictionary<string, double[]> _table = new();
 
-    // ── Hyperparameters ───────────────────────────────────────────────────────
+    // Hyperparameters
     public double LearningRate    { get; set; } = 0.3;    // α — start high first for exploration, then slowly decay it down for exploitation
     public double LearningRateMin { get; set; } = 0.02;   // α floor
     public double LearningRateDecayFactor { get; set; } = 0.9995; // per-episode decay
     public double Discount        { get; set; } = 0.95;   // γ
 
-    // ── Learning rate decay ───────────────────────────────────────────────────
+    // Learning rate decay
 
     /// <summary>
     /// Call once per episode. Decays alpha toward LearningRateMin.
@@ -34,7 +34,7 @@ public class QTable
     public void DecayLearningRate()
         => LearningRate = Math.Max(LearningRateMin, LearningRate * LearningRateDecayFactor);
 
-    // ── Core string-keyed API ─────────────────────────────────────────────────
+    // Core string-keyed API
 
     public double GetByKey(string stateKey, int actionIdx, int actionCount)
     {
@@ -66,7 +66,7 @@ public class QTable
     public double MaxQByKey(string stateKey, int actionCount)
         => GetByKey(stateKey, BestActionIndex(stateKey, actionCount), actionCount);
 
-    // ── TD error ──────────────────────────────────────────────────────────────
+    // TD error
 
     /// <summary>
     /// Returns the raw TD error: δ = r + γ·maxQ(s') - Q(s,a).
@@ -83,13 +83,13 @@ public class QTable
         return target - current;
     }
 
-    // ── Standard update (uses LearningRate) ───────────────────────────────────
+    // Standard update (uses LearningRate)
 
     public void UpdateByKey(string stateKey, int actionIdx, double reward,
                              string nextStateKey, int actionCount)
         => UpdateByKeyWithAlpha(stateKey, actionIdx, reward, nextStateKey, actionCount, LearningRate);
 
-    // ── Update with explicit alpha (used by eligibility traces and PER) ───────
+    // Update with explicit alpha (used by eligibility traces and PER)
 
     /// <summary>
     /// Q(s,a) ← Q(s,a) + alpha · δ
@@ -116,7 +116,7 @@ public class QTable
         SetByKey(stateKey, actionIdx, old + alpha * delta * eligibility, actionCount);
     }
 
-    // ── Thread-safe merge (for parallel training) ────────────────────────────
+    // Thread-safe merge (for parallel training)
 
     /// <summary>
     /// Merges a batch of (stateKey, actionIdx, deltaQ) directly into the table.
@@ -132,7 +132,7 @@ public class QTable
         }
     }
 
-    // ── Legacy API (QLearningAgent compat) ────────────────────────────────────
+    // Legacy API (QLearningAgent compat)
 
     private static string LegacyKey(QLearningState s)
         => $"{s.X},{s.Y},{s.BatteryBucket},{(s.IsDay ? 1 : 0)}";
@@ -150,7 +150,7 @@ public class QTable
     public void Update(QLearningState state, int actionIdx, double reward, QLearningState nextState)
         => UpdateByKey(LegacyKey(state), actionIdx, reward, LegacyKey(nextState), ActionCount);
 
-    // ── Serialisation ─────────────────────────────────────────────────────────
+    // Serialisation
 
     public void Save(string path)
     {
@@ -172,7 +172,7 @@ public class QTable
 
     public int StateCount => _table.Count;
 
-    // ── Deep clone ────────────────────────────────────────────────────────────
+    // Deep clone
 
     /// <summary>
     /// Returns a full deep copy of this Q-table.

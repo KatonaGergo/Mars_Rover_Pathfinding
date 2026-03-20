@@ -3,7 +3,7 @@ using MarsRover.Core.Algorithm;
 using MarsRover.Core.Simulation;
 using System.Diagnostics;
 
-// ── Usage ─────────────────────────────────────────────────────────────────────
+// Usage
 //
 //   dotnet run                                  → use config.json defaults
 //   dotnet run -- --map path.csv                → override map only
@@ -15,7 +15,7 @@ using System.Diagnostics;
 // CLI flags always override config.json. Missing flags keep config.json values.
 // config.json is created with defaults on first run if it does not exist.
 
-// ── Special flags handled before config load ──────────────────────────────────
+// Special flags handled before config load
 bool wantsHelp = Array.Exists(args, a => a is "--help" or "-h");
 if (wantsHelp)
 {
@@ -23,7 +23,7 @@ if (wantsHelp)
     return 0;
 }
 
-// ── Load config ───────────────────────────────────────────────────────────────
+// Load config
 var config = AppConfig.Load("config.json");
 
 if (!config.ApplyArgs(args, out string argError))
@@ -46,7 +46,7 @@ if (wantsResetModel)
     PrintResetModelResult(config.ModelPath, archive: !resetDelete);
 }
 
-// ── --info mode ───────────────────────────────────────────────────────────────
+// --info mode
 if (wantsInfo)
 {
     ConsoleRunner.PrintModelInfo(config.ModelPath);
@@ -61,7 +61,7 @@ if (!config.Validate(out string validationError))
     return 1;
 }
 
-// ── --verify mode ────────────────────────────────────────────────────────────
+// --verify mode
 if (wantsVerify)
 {
     if (!TryReadIntArg(args, "--verify-timeout", 300, min: 1, max: 86_400, out int timeoutSec, out string timeoutErr))
@@ -131,10 +131,10 @@ if (wantsBenchmark)
     return RunBenchmark(config, args);
 }
 
-// ── Boot screen ───────────────────────────────────────────────────────────────
+// Boot screen
 TerminalUI.RunLoadingScreen();
 
-// ── Main menu loop ────────────────────────────────────────────────────────────
+// Main menu loop
 // SystemStatus loops back to the menu; StartMission or Exit break out.
 while (true)
 {
@@ -159,7 +159,7 @@ while (true)
     break;  // StartMission → fall through to ConsoleRunner
 }
 
-// ── Mission run ───────────────────────────────────────────────────────────────
+// Mission run
 var runner = new ConsoleRunner(config);
 try
 {
@@ -180,7 +180,7 @@ catch (InvalidOperationException ex) when (IsSchemaMismatchError(ex))
     return 2;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Helpers
 static void PrintUsage()
 {
     Console.WriteLine();

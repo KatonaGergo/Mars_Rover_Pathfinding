@@ -7,7 +7,7 @@ namespace MarsRover.Console;
 /// <summary>
 /// Terminal dashboard for the Mars Rover Q-learning agent.
 ///
-/// FLOW:
+/// Runtime flow:
 ///   1. ASCII art banner + mission card
 ///   2. Main menu — button-style keyboard navigation
 ///   3. Training with live progress panel
@@ -22,9 +22,9 @@ public class ConsoleRunner
 
     public ConsoleRunner(AppConfig cfg) => _cfg = cfg;
 
-    // ═════════════════════════════════════════════════════════════════════════
+
     // --info entry point
-    // ═════════════════════════════════════════════════════════════════════════
+
 
     public static void PrintModelInfo(string modelPath)
     {
@@ -49,15 +49,15 @@ public class ConsoleRunner
         BoxBottom();
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
+
     // Main run
-    // ═════════════════════════════════════════════════════════════════════════
+
 
     public void Run()
     {
         PrintBanner();
 
-        // ── Load map ──────────────────────────────────────────────────────────
+        // Load map
         GameMap map;
         try
         {
@@ -71,26 +71,26 @@ public class ConsoleRunner
             return;
         }
 
-        // ── Mission card ──────────────────────────────────────────────────────
+        // Mission card
         PrintMissionCard(map);
 
-        // ── Check for saved model ─────────────────────────────────────────────
+        // Check for saved model
         var simRunner  = new SimulationRunner(map, _cfg.Hours, _cfg.ModelPath);
         var savedModel = simRunner.GetModelInfo();
 
-        // ── Main menu ─────────────────────────────────────────────────────────
+        // Main menu
         var choice = ShowMainMenu(savedModel);
         if (choice == MenuChoice.Quit) return;
 
         bool skipTrain = (choice == MenuChoice.RunOnly);
 
-        // ── Training ──────────────────────────────────────────────────────────
+        // Training
         if (!skipTrain)
         {
             RunTraining(simRunner, savedModel);
         }
 
-        // ── Deployment ────────────────────────────────────────────────────────
+        // Deployment
         Ln();
         BoxTop("  MISSION DEPLOYMENT  —  epsilon = 0  (pure exploitation)");
         BoxLine("  Launching rover with best learned policy...", ConsoleColor.Yellow);
@@ -101,10 +101,10 @@ public class ConsoleRunner
 
         PrintTickLog(log);
 
-        // ── Summary ───────────────────────────────────────────────────────────
+        // Summary
         PrintMissionSummary(log, map);
 
-        // ── Save log ──────────────────────────────────────────────────────────
+        // Save log
         var savedPath = RunLogger.Save(log, _cfg, map);
         if (savedPath != null)
         {
@@ -115,9 +115,9 @@ public class ConsoleRunner
         }
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
+
     // Banner
-    // ═════════════════════════════════════════════════════════════════════════
+
 
     private static void PrintBanner()
     {
@@ -138,9 +138,9 @@ public class ConsoleRunner
         Ln();
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
+
     // Mission card
-    // ═════════════════════════════════════════════════════════════════════════
+
 
     private void PrintMissionCard(GameMap map)
     {
@@ -156,13 +156,13 @@ public class ConsoleRunner
         Ln();
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
+
     // Main menu
-    // ═════════════════════════════════════════════════════════════════════════
+
 
     private enum MenuChoice { Train, RunOnly, Quit }
 
-    // ── Button definitions ────────────────────────────────────────────────────
+    // Button definitions
 
     private record Button(string Label, string Description, MenuChoice Choice, ConsoleColor Color);
 
@@ -327,9 +327,9 @@ public class ConsoleRunner
         Ln();
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
+
     // Training
-    // ═════════════════════════════════════════════════════════════════════════
+
 
     private void RunTraining(SimulationRunner simRunner, ModelInfo? savedModel)
     {
@@ -383,9 +383,9 @@ public class ConsoleRunner
         BoxBottom();
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
+
     // Tick log
-    // ═════════════════════════════════════════════════════════════════════════
+
 
     private static void PrintTickLog(List<SimulationLogEntry> log)
     {
@@ -424,9 +424,9 @@ public class ConsoleRunner
         Ln();
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
+
     // Mission summary
-    // ═════════════════════════════════════════════════════════════════════════
+
 
     private void PrintMissionSummary(List<SimulationLogEntry> log, GameMap map)
     {
@@ -469,9 +469,9 @@ public class ConsoleRunner
         BoxBottom();
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
+
     // Box drawing helpers
-    // ═════════════════════════════════════════════════════════════════════════
+
 
     private static void BoxTop(string title)
     {
@@ -506,9 +506,9 @@ public class ConsoleRunner
         Ln();
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
+
     // Visual bar helpers
-    // ═════════════════════════════════════════════════════════════════════════
+
 
     /// <summary>Small mineral progress bar: ████░░░░ (max 23 minerals)</summary>
     private static string MineralBar(int minerals, int max, bool wide = false)
@@ -527,9 +527,9 @@ public class ConsoleRunner
         return "[" + new string('█', filled) + new string('░', len - filled) + "]";
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
+
     // Console helpers
-    // ═════════════════════════════════════════════════════════════════════════
+
 
     private static void Col(ConsoleColor c) => System.Console.ForegroundColor = c;
     private static void Reset()             => System.Console.ResetColor();

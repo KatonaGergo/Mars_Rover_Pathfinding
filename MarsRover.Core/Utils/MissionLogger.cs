@@ -51,7 +51,7 @@ public static class MissionLogger
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+
     private static void Write(
         StreamWriter             w,
         List<SimulationLogEntry> log,
@@ -61,14 +61,14 @@ public static class MissionLogger
         string   modelPath,
         GameMap  map)
     {
-        // ── Title block ───────────────────────────────────────────────────────
+        // Title block
         Sep(w, '═');
         w.WriteLine(Center("MARS ROVER  ·  MISSION RUN LOG"));
         w.WriteLine(Center("Q-Learning Agent  ·  Hybrid A* Navigation"));
         Sep(w, '═');
         w.WriteLine();
 
-        // ── Mission parameters ────────────────────────────────────────────────
+        // Mission parameters
         Section(w, "MISSION PARAMETERS");
         Field(w, "Date",     DateTime.Now.ToString("yyyy-MM-dd  HH:mm:ss"));
         Field(w, "Map file", mapPath);
@@ -87,7 +87,7 @@ public static class MissionLogger
         bool home  = last.X == map.StartX && last.Y == map.StartY;
         bool alive = last.Battery > 0;
 
-        // ── Quick result banner ───────────────────────────────────────────────
+        // Quick result banner
         Section(w, "RESULT");
         string resultLine = (home && alive)
             ? $"MISSION SUCCESS  —  {last.TotalMinerals} minerals collected"
@@ -104,7 +104,7 @@ public static class MissionLogger
         w.WriteLine($"  Survived    {(alive ? "YES" : "NO")}");
         w.WriteLine();
 
-        // ── Mineral breakdown ─────────────────────────────────────────────────
+        // Mineral breakdown
         Section(w, "MINERAL BREAKDOWN");
         w.WriteLine($"  {"Type",-10} {"Count",6}   {"Bar",25}");
         w.WriteLine($"  {new string('─', 46)}");
@@ -116,7 +116,7 @@ public static class MissionLogger
         w.WriteLine($"  {"TOTAL",-10} {last.TotalMinerals,6}");
         w.WriteLine();
 
-        // ── Phase statistics ──────────────────────────────────────────────────
+        // Phase statistics
         Section(w, "PHASE STATISTICS");
         int dayTicks     = log.Count(e => e.IsDay);
         int nightTicks   = log.Count(e => !e.IsDay);
@@ -134,7 +134,7 @@ public static class MissionLogger
         w.WriteLine($"  Standby ticks  :  {standbyTicks}");
         w.WriteLine();
 
-        // ── Battery timeline ──────────────────────────────────────────────────
+        // Battery timeline
         Section(w, "BATTERY TIMELINE  (every 4 ticks)");
         w.WriteLine($"  {"Tick",-5} {"Phase",-4} {"Battery",8}   Chart");
         w.WriteLine($"  {new string('─', 60)}");
@@ -151,7 +151,7 @@ public static class MissionLogger
         }
         w.WriteLine();
 
-        // ── Full tick-by-tick log ─────────────────────────────────────────────
+        // Full tick-by-tick log
         Section(w, "FULL TICK LOG");
         w.WriteLine($"  {"TICK",-5} {"TIME",-10} {"PHASE",-12} {"POSITION",-10} {"BATTERY",-8} {"MINERALS",-13} EVENT");
         w.WriteLine($"  {new string('─', W - 2)}");
@@ -178,7 +178,7 @@ public static class MissionLogger
         Sep(w, '═');
     }
 
-    // ── Formatting helpers ────────────────────────────────────────────────────
+    // Formatting helpers
 
     private static string Bar(int value, int max, int len)
     {

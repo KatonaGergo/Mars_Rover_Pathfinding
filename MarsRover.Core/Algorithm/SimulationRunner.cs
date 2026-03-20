@@ -5,37 +5,11 @@ using MarsRover.Core.Utils;
 namespace MarsRover.Core.Algorithm;
 
 /// <summary>
-/// Orchestrates Q-table training with four learning improvements:
+/// Coordinates training and deployment for the rover policy.
 ///
-/// ① ELIGIBILITY TRACES (Q-λ)
-///   After each strategic decision the TD error δ is broadcast backward
-///   through all recently visited state-action pairs via a recency-weighted
-///   trace. This solves the key problem in our hybrid architecture: the rover
-///   decides "SeekMineral X" then A* walks 8 steps — the +150 reward arrives
-///   8 ticks later. Standard Q-learning only updates the decision tick.
-///   With λ=0.7 the credit propagates back through every prior decision that
-///   led here, weighted by how recently it was made.
-///   λ=0: pure Q-learning. λ=1: full Monte Carlo. λ=0.7: best of both.
-///
-/// ② PRIORITIZED EXPERIENCE REPLAY (PER)
-///   Transitions are sampled proportionally to |TD error|^α instead of
-///   uniformly. High-surprise transitions (unexpected minerals, battery deaths,
-///   failed returns) dominate the replay batch. Zero-surprise replays of
-///   already-learned states are sampled rarely. Priorities are updated after
-///   each Q-table update.
-///
-/// ③ LEARNING RATE DECAY
-///   α starts at 0.3 (fast early learning) and decays toward 0.02 each episode.
-///   Prevents late-stage oscillation where correct Q-values get overwritten
-///   by noisy outlier transitions after the policy has converged.
-///
-/// ④ PARALLELIZATION
-///   Episodes are collected in batches using Parallel.For. Each thread gets its
-///   own agent (reads shared Q-table) and map clone. No Q-table writes during
-///   collection — only reads — so Dictionary is safe without locks.
-///   After all threads finish, the serial merge phase applies eligibility traces
-///   and fills the PER buffer. Then PER replay updates the Q-table.
-///   Result: 4 threads ≈ 3.5× throughput (some overhead from merge + replay).
+/// Training combines eligibility traces, prioritized replay, learning-rate decay,
+/// and parallel episode collection. Episodes are gathered in parallel and merged
+/// serially so updates stay deterministic and easy to reason about.
 /// </summary>
 public class SimulationRunner
 {
@@ -46,7 +20,7 @@ public class SimulationRunner
     private const int PolicySchemaVersion = 2;
     public static int CurrentPolicySchemaVersion => PolicySchemaVersion;
 
-    // ── Hyperparameters ───────────────────────────────────────────────────────
+    // Hyperparameters
     private const int    BufferCapacity   = 20_000;
     private const int    BatchSize        = 64;
     private const int    WarmupEpisodes   = 10;   // episode-based warmup (not step-based)
@@ -81,7 +55,7 @@ public class SimulationRunner
     public static string ResolveModelPath(string modelPath)
         => Path.Combine(SavedModelsDir, Path.GetFileName(modelPath));
 
-    // ── Training ──────────────────────────────────────────────────────────────
+    // Training
 
     public TrainingResult Train(
         int episodes = 2000,
@@ -338,7 +312,7 @@ public class SimulationRunner
         int seedOffset = 0,
         bool persistModel = true)
     {
-        // ── Load or create Q-table ────────────────────────────────────────────
+        // Load or create Q-table
         // Disk resume is opt-in via TrainingOptions.ResumeSavedModel so UI/CLI
         // can enforce explicit user intent before reusing stale checkpoints.
         bool resumeFromDisk = options.ResumeSavedModel
@@ -376,7 +350,7 @@ public class SimulationRunner
             int thisCount    = Math.Min(episodeBatch, episodes - epBase);
             double iterEps   = epsilon; // all threads in this batch share the same epsilon
 
-            // ── ① PARALLEL EPISODE COLLECTION ────────────────────────────────
+            // Collect episodes in parallel.
             // Each thread runs one full episode independently.
             // Reads sharedTable for action selection — no writes.
             var collected = new EpisodeData[thisCount];
@@ -395,7 +369,7 @@ public class SimulationRunner
                         captureSnapshots);
                 });
 
-            // ── SERIAL MERGE PHASE ────────────────────────────────────────────
+            // Merge each finished episode on the main thread.
             for (int i = 0; i < collected.Length; i++)
             {
                 var ep = collected[i];
@@ -403,7 +377,7 @@ public class SimulationRunner
 
                 allRewards.Add(ep.TotalReward);
 
-                // ② ELIGIBILITY TRACES: always apply to sharedTable first
+                // Apply eligibility traces before replaying transitions.
                 if (ep.Transitions.Count > 0)
                     ApplyEligibilityTraces(ep.Transitions, sharedTable,
                                            options.Lambda, options.TraceThreshold);
@@ -451,7 +425,7 @@ public class SimulationRunner
                 }
             }
 
-            // ③ PER REPLAY: sample and update Q-table once buffer is warm
+            // Replay sampled transitions once the buffer is warm.
             int epsDoneBatch = epBase + thisCount;
             if (epsDoneBatch >= WarmupEpisodes && buffer.IsReady(BatchSize))
             {
@@ -477,7 +451,7 @@ public class SimulationRunner
                 }
             }
 
-            // ③ LEARNING RATE DECAY: once per iteration
+            // Decay the learning rate once per iteration.
             sharedTable.DecayLearningRate();
         }
 
@@ -491,7 +465,7 @@ public class SimulationRunner
                 tableToSave);
     }
 
-    // ── Single episode runner (runs on a thread) ──────────────────────────────
+    // Single episode runner (runs on a thread)
 
     private EpisodeData RunEpisode(
         QTable sharedTable,
@@ -599,7 +573,7 @@ public class SimulationRunner
             EndBattery:        final.Battery);
     }
 
-    // ── ① Eligibility Traces ──────────────────────────────────────────────────
+    // Eligibility traces
 
     /// <summary>
     /// Applies Q(λ) updates to the shared Q-table for one episode's transitions.
@@ -664,9 +638,7 @@ public class SimulationRunner
         }
     }
 
-    // ── Live simulation ───────────────────────────────────────────────────────
-
-    // ── Live simulation ───────────────────────────────────────────────────────
+    // Live simulation
 
     /// <summary>
     /// Runs one deployment pass with epsilon=0 (pure exploitation, no randomness).
@@ -751,7 +723,7 @@ public class SimulationRunner
         return (training, log);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
     private static EpisodeSnapshot BuildSnapshot(EpisodeData ep, int episodeNum)
         => new EpisodeSnapshot(
@@ -773,9 +745,9 @@ public class SimulationRunner
     public static bool ShouldUseDiversityReplay(TrainingOptions options)
         => (options.ReplayDiversity ?? new ReplayDiversityOptions()).Enabled;
 
-    // ── Persistence ───────────────────────────────────────────────────────────
+    // Persistence
 
-    // ── Public model info ─────────────────────────────────────────────────────
+    // Public model info
 
     /// <summary>
     /// Returns metadata about the saved model at this runner's model path,
@@ -923,7 +895,7 @@ public record ModelResetResult(
     string? ArchiveDirectory,
     IReadOnlyList<string> ProcessedFiles);
 
-// ── Internal data structures ──────────────────────────────────────────────────
+// Internal data structures
 
 /// <summary>One strategic transition collected during an episode.</summary>
 internal record struct StrategicTransition(

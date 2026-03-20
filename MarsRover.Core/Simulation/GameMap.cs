@@ -43,7 +43,7 @@ public class GameMap
         _remainingMinerals = remainingMinerals ?? new HashSet<(int x, int y)>(originalMinerals);
     }
 
-    // ── Factory ───────────────────────────────────────────────────────────────
+    // Factory
 
     public static GameMap LoadFromFile(string path)
     {
@@ -129,7 +129,7 @@ public class GameMap
         return new GameMap(newTiles, StartX, StartY, newOriginal, newRemaining);
     }
 
-    // ── Tile access ───────────────────────────────────────────────────────────
+    // Tile access
 
     public TileType GetTile(int x, int y)
     {
@@ -147,7 +147,7 @@ public class GameMap
     public bool CollectMineral(int x, int y) => _remainingMinerals.Remove((x, y));
     public bool InBounds(int x, int y)       => x >= 0 && x < Width && y >= 0 && y < Height;
 
-    // ── Neighbor helpers ──────────────────────────────────────────────────────
+    // Neighbor helpers
 
     public IEnumerable<(int x, int y, Direction dir)> GetPassableNeighbors(int x, int y)
     {
@@ -170,7 +170,7 @@ public class GameMap
     /// <summary>Static accessor for direction deltas, used by AStarPathfinder.</summary>
     public static (int dx, int dy) DirectionDelta(Direction dir) => DirectionDeltas[(int)dir];
 
-    // ── Distance helpers ──────────────────────────────────────────────────────
+    // Distance helpers
 
     public int ManhattanDistance(int x1, int y1, int x2, int y2)
         => Math.Abs(x1 - x2) + Math.Abs(y1 - y2);
@@ -217,7 +217,7 @@ public class GameMap
         return results;
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // Private helpers
 
     private static TileType ParseChar(char c) => c switch
     {

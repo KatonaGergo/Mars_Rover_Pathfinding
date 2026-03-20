@@ -4,22 +4,23 @@ using MarsRover.Core.Simulation;
 namespace MarsRover.Core.Algorithm;
 
 /// <summary>
-/// DQN AGENT — drops the Q-table dictionary, replaces it with a neural network.
+/// DQN-based variant of the rover agent that replaces direct Q-table lookups
+/// with a neural network value function.
 ///
-/// WHAT STAYS THE SAME (from HybridAgent):
+/// Shared with HybridAgent:
 ///   - A* navigation (optimal paths to targets)
 ///   - Phase system (Collection → Returning → AtBase)
 ///   - Hard return trigger (time-budget math)
 ///   - Detour mineral collection on return path
 ///   - ε-greedy exploration
 ///
-/// WHAT CHANGES:
+/// Key differences:
 ///   - State: 14 rich floats instead of 6 bucketed ints
 ///   - Q-function: NeuralNetwork instead of Dictionary lookup
 ///   - Target network: frozen copy synced every TargetSyncInterval steps
 ///   - Weights saved/loaded from disk
 ///
-/// STATE VECTOR (14 floats, all normalised 0-1 or -1 to 1):
+/// State vector (14 floats, all normalized 0-1 or -1 to 1):
 ///   [0]  battery %           (0-1)
 ///   [1]  is day              (0 or 1)
 ///   [2]  time remaining %    (0-1)
@@ -35,11 +36,11 @@ namespace MarsRover.Core.Algorithm;
 ///   [12] 3rd nearest dy      (-1 to 1)
 ///   [13] minerals remaining % (0-1, relative to map total)
 ///
-/// ACTIONS (4): SeekMineral, SeekNearestMineral, ReturnToBase, Standby
+/// Actions (4): SeekMineral, SeekNearestMineral, ReturnToBase, Standby
 /// </summary>
 public class DQNAgent
 {
-    // ── Tuning ────────────────────────────────────────────────────────────────
+    // Tuning
     private const int    StateSize            = 14;
     private const int    ActionCount          = 4;
     private const int    Hidden1              = 128;
@@ -48,18 +49,18 @@ public class DQNAgent
     private const int    ReturnSafetyBuffer   = 1;
     private const double DetourThreshold      = 4.0;
 
-    // ── Networks ──────────────────────────────────────────────────────────────
+    // Networks
     private readonly NeuralNetwork _onlineNet;
     private readonly NeuralNetwork _targetNet;  // frozen copy — synced every N steps
     private int _stepsSinceSync = 0;
     private int _totalSteps     = 0;
 
-    // ── Exploration ───────────────────────────────────────────────────────────
+    // Exploration
     public double Epsilon      { get; set; } = 1.0;
     public double EpsilonMin   { get; set; } = 0.05;
     public double EpsilonDecay { get; set; } = 0.995;
 
-    // ── Agent state ───────────────────────────────────────────────────────────
+    // Agent state
     private readonly Random   _random;
     private readonly GameMap  _map;
     private readonly int      _totalTicks;
@@ -71,7 +72,7 @@ public class DQNAgent
     public MissionPhase CurrentPhase => _phase;
     public int          TotalSteps   => _totalSteps;
 
-    // ─────────────────────────────────────────────────────────────────────────
+
 
     public DQNAgent(GameMap map, int totalTicks, NeuralNetwork? existingNet = null, int seed = 42)
     {
@@ -84,7 +85,7 @@ public class DQNAgent
         _targetNet = _onlineNet.Clone(); // target starts as exact copy
     }
 
-    // ── Main tick ─────────────────────────────────────────────────────────────
+    // Main tick
 
     public RoverAction SelectAction(RoverState state, GameMap liveMap, bool isTraining = false)
     {
@@ -121,7 +122,7 @@ public class DQNAgent
         if (_phase == MissionPhase.Returning)
             return NavigateHome(state, liveMap);
 
-        // ── DQN strategic decision ────────────────────────────────────────────
+        // DQN strategic decision
         var decision = MakeDecision(state, liveMap, isTraining);
         return ExecuteDecision(decision, state, liveMap);
     }
@@ -139,25 +140,25 @@ public class DQNAgent
     public (RoverAction action, int decisionIdx) SelectActionWithDecision(
         RoverState state, GameMap liveMap, bool isTraining = false)
     {
-        // ── Phase: AtBase ─────────────────────────────────────────────────────
+        // Phase: AtBase
         if (_phase == MissionPhase.AtBase)
             return (RoverAction.StandbyAction, -1);
 
-        // ── Hard rule: trigger return phase ──────────────────────────────────
+        // Hard rule: trigger return phase
         if (_phase != MissionPhase.Returning && MustReturnNow(state, liveMap))
         {
             _phase = MissionPhase.Returning;
             _currentPath.Clear();
         }
 
-        // ── Mine if standing on mineral ───────────────────────────────────────
+        // Mine if standing on mineral
         if (liveMap.HasMineral(state.X, state.Y))
         {
             _currentPath.Clear();
             return (RoverAction.MineAction, -1); // not a strategic decision
         }
 
-        // ── Follow existing path ──────────────────────────────────────────────
+        // Follow existing path
         if (_currentPath.Count > 0)
         {
             if (_phase == MissionPhase.Returning)
@@ -173,17 +174,17 @@ public class DQNAgent
             return (RoverAction.Move(next.Direction, ChooseSpeed(state)), -1);
         }
 
-        // ── Navigate home if returning ────────────────────────────────────────
+        // Navigate home if returning
         if (_phase == MissionPhase.Returning)
             return (NavigateHome(state, liveMap), -1);
 
-        // ── Strategic DQN decision (the only tick that counts for learning) ───
+        // Strategic DQN decision (the only tick that counts for learning)
         var decision = MakeDecision(state, liveMap, isTraining);
         var action   = ExecuteDecision(decision, state, liveMap);
         return (action, (int)decision);
     }
 
-    // ── Decision making ───────────────────────────────────────────────────────
+    // Decision making
 
     private HybridDecision MakeDecision(RoverState state, GameMap liveMap, bool isTraining)
     {
@@ -209,7 +210,7 @@ public class DQNAgent
         return (HybridDecision)best;
     }
 
-    // ── DQN learning update ───────────────────────────────────────────────────
+    // DQN learning update
 
     /// <summary>
     /// Called by SimulationRunner with a sampled mini-batch from the replay buffer.
@@ -265,7 +266,7 @@ public class DQNAgent
         }
     }
 
-    // ── Rich state vector (Step 4) ────────────────────────────────────────────
+    // Rich state vector (Step 4)
 
     public double[] BuildStateVector(RoverState state, GameMap liveMap)
     {
@@ -334,7 +335,7 @@ public class DQNAgent
         return vec;
     }
 
-    // ── Navigation (identical to HybridAgent) ─────────────────────────────────
+    // Navigation (identical to HybridAgent)
 
     private bool MustReturnNow(RoverState state, GameMap liveMap)
     {
@@ -462,7 +463,7 @@ public class DQNAgent
         return RoverSpeed.Slow;
     }
 
-    // ── Housekeeping ──────────────────────────────────────────────────────────
+    // Housekeeping
 
     public void DecayEpsilon()
         => Epsilon = Math.Max(EpsilonMin, Epsilon * EpsilonDecay);
@@ -475,7 +476,7 @@ public class DQNAgent
 
     public NeuralNetwork OnlineNet => _onlineNet;
 
-    // ── Save / Load (Step 3) ──────────────────────────────────────────────────
+    // Save / Load (Step 3)
 
     public void SaveWeights(string path) => _onlineNet.Save(path);
 

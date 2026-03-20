@@ -16,7 +16,7 @@ public record RoverState(
     RoverAction LastAction
 )
 {
-    // ── Time helpers ─────────────────────────────────────────────────────────
+    // Time helpers
     // A full sol = 24h = 48 half-hour ticks
     // Day = 16h = 32 ticks | Night = 8h = 16 ticks
     public const int TicksPerSol   = 48;

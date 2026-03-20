@@ -3,10 +3,9 @@ namespace MarsRover.Core.Models;
 /// <summary>
 /// All actions the rover can perform in one half-hour tick.
 ///
-/// FREE MOVEMENT MODEL:
-///   A Move action carries a list of 1–3 individual direction steps.
-///   The number of steps equals the speed value (Slow=1, Normal=2, Fast=3).
-///   Each step moves the rover one cell in any of the 8 directions.
+/// Free-movement model:
+/// A Move action carries 1-3 direction steps (Slow=1, Normal=2, Fast=3).
+/// Each step moves the rover one cell in any of the 8 directions.
 ///
 ///   Energy cost is based on speed (the number of steps), applied once per tick:
 ///     Slow (1 step)  — k×1² = 2%
@@ -44,12 +43,12 @@ public record RoverAction(
     IReadOnlyList<Direction>? Directions = null,
     RoverSpeed              Speed = RoverSpeed.Slow)
 {
-    // ── Convenience properties ────────────────────────────────────────────────
+    // Convenience properties
 
     /// First direction in the list
     public Direction? Dir => Directions is { Count: > 0 } d ? d[0] : null;
 
-    // ── Factory methods ───────────────────────────────────────────────────────
+    // Factory methods
 
     public static readonly RoverAction MineAction    = new(RoverActionType.Mine);
     public static readonly RoverAction StandbyAction = new(RoverActionType.Standby);

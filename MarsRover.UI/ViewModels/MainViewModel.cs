@@ -31,7 +31,7 @@ public partial class MainViewModel : ObservableObject
     private const double MaxMapZoom = 2.6;
     private const double MapZoomStep = 0.15;
 
-    // ── Simulation state ─────────────────────────────────────────────────────
+    // Simulation state
     [ObservableProperty] private double? _durationHours  = 48;
     [ObservableProperty] private int    _trainingEpisodes = 2000;
     [ObservableProperty] private double _playbackSpeed   = 1.0;
@@ -44,7 +44,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private double _trainingProgress = 0;
     [ObservableProperty] private string _trainingStatus   = "Ready";
 
-    // ── Current tick display ─────────────────────────────────────────────────
+    // Current tick display
     [ObservableProperty] private string _currentTime      = "Sol 1, 0.0h";
     [ObservableProperty] private string _dayNightLabel    = "☀ Day";
     [ObservableProperty] private double _battery          = 100.0;
@@ -61,7 +61,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private double _simProgress      = 0;
     [ObservableProperty] private bool   _isNight          = false;
 
-    // ── Map + model path ─────────────────────────────────────────────────────
+    // Map + model path
     [ObservableProperty] private GameMap? _gameMap;
     public bool HasMapLoaded => GameMap != null;
     public bool HasReplayData => HasLog || (GhostTrail?.Count > 0);
@@ -99,17 +99,17 @@ public partial class MainViewModel : ObservableObject
     public Func<Task<string?>>? PickModelFileAsync { get; set; }
     public Func<Task>? BackToMenuAsync { get; set; }
 
-    // ── Log & playback ───────────────────────────────────────────────────────
+    // Log & playback
     private List<SimulationLogEntry> _log = new();
     private int                      _playbackIndex = 0;
     private int                      _lastMoveLogTick = -1; // avoid duplicate move logs on expanded sub-steps
     private DispatcherTimer          _playbackTimer;
 
-    // ── Event log (last 20 lines) ─────────────────────────────────────────────
+    // Event log (last 20 lines)
     public ObservableCollection<string> EventLog      { get; } = new();
     public ObservableCollection<string> GhostEventLog { get; } = new();
 
-    // ── Ghost replay (training visualisation) ────────────────────────────────
+    // Ghost replay (training visualisation)
     [ObservableProperty] private List<MarsRover.Core.Algorithm.StepRecord>? _ghostTrail;
     [ObservableProperty] private int  _ghostIndex   = 0;
     [ObservableProperty] private bool _isGhostMode  = false;
@@ -124,7 +124,7 @@ public partial class MainViewModel : ObservableObject
     private static readonly TimeSpan MapRevealDuration = TimeSpan.FromSeconds(5.8);
     private const double HideScannerHudAtRevealProgress = 0.05;
 
-    // ── View toggle ───────────────────────────────────────────────────────────
+    // View toggle
     [ObservableProperty] private bool _showTrainingChart = false;
     [ObservableProperty] private bool _showGhostReplay   = false;
     [ObservableProperty] private bool _showWatchPrompt   = false;
@@ -201,7 +201,7 @@ public partial class MainViewModel : ObservableObject
             DurationHours = rounded;
     }
 
-    // ── Simulation chart series (playback) ────────────────────────────────────
+    // Simulation chart series (playback)
     public ISeries[] BatterySeries { get; }
     public ISeries[] MineralSeries { get; }
     public Axis[]    TimeAxis      { get; }
@@ -209,7 +209,7 @@ public partial class MainViewModel : ObservableObject
     private readonly ObservableCollection<LiveChartsCore.Defaults.ObservablePoint> _batteryPoints  = new();
     private readonly ObservableCollection<LiveChartsCore.Defaults.ObservablePoint> _mineralPoints  = new();
 
-    // ── Training chart series (per-episode) ───────────────────────────────────
+    // Training chart series (per-episode)
     public ISeries[] TrainingMineralSeries  { get; }
     public ISeries[] TrainingRewardSeries   { get; }
     public ISeries[] TrainingBatterySeries  { get; }
@@ -369,7 +369,7 @@ public partial class MainViewModel : ObservableObject
         TrainingStatus = "No map loaded. Click 'LOAD MAP' to begin.";
     }
 
-    // ── Commands ──────────────────────────────────────────────────────────────
+    // Commands
 
     [RelayCommand]
     private void ShowChart()
@@ -1000,7 +1000,7 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    // ── Playback timer ────────────────────────────────────────────────────────
+    // Playback timer
 
     [RelayCommand]
     private async Task BackToMenu()
@@ -1103,7 +1103,7 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    // ── Ghost replay ─────────────────────────────────────────────────────────
+    // Ghost replay
 
     private void HandleTrainingRunCompleted(TrainingProgress progress)
     {
@@ -1407,7 +1407,7 @@ public partial class MainViewModel : ObservableObject
         ShowMineralsFoundPrompt = false;
         MineralsFoundCountdown = 0;
     }
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
 
 

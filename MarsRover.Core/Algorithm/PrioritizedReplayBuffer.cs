@@ -15,14 +15,14 @@ namespace MarsRover.Core.Algorithm;
 ///   reward, a −200 failed-return penalty, a battery death. These are the experiences
 ///   that most need to propagate through the Q-table.
 ///   
-/// PRIORITY FORMULA:
+/// Priority formula:
 ///   priority(i) = (|δ_i| + PriorityEpsilon) ^ PriorityExponent
 ///   where δ_i is the TD error at last update.
 ///   New transitions get max_priority so they are always sampled at least once.
 /// </summary>
 public class PrioritizedReplayBuffer
 {
-    // ── PER hyperparameters ───────────────────────────────────────────────────
+    // PER hyperparameters
     public double PriorityExponent { get; set; } = 0.6;   // α: 0=uniform, 1=fully prioritised
     public double PriorityEpsilon  { get; set; } = 1e-4;  // prevents zero-probability transitions
 
@@ -45,7 +45,7 @@ public class PrioritizedReplayBuffer
         _random   = new Random(seed);
     }
 
-    // ── Push ─────────────────────────────────────────────────────────────────
+    // Push
 
     /// <summary>
     /// Push a new transition. New entries always get max_priority so they
@@ -69,7 +69,7 @@ public class PrioritizedReplayBuffer
         if (_count < _capacity) _count++;
     }
 
-    // ── Sample ────────────────────────────────────────────────────────────────
+    // Sample
 
     /// <summary>
     /// Samples <paramref name="batchSize"/> transitions proportional to priority.
@@ -306,7 +306,7 @@ public class PrioritizedReplayBuffer
         return $"{solPhase}:{battery}:{margin}";
     }
 
-    // ── Priority update ───────────────────────────────────────────────────────
+    // Priority update
 
     /// <summary>
     /// Update the priority for a transition after computing its new TD error.

@@ -29,7 +29,7 @@ public class ReplayBuffer
         _random   = new Random(seed);
     }
 
-    // ── Push (DQN path — carries float vectors) ───────────────────────────────
+    // Push (DQN path — carries float vectors)
 
     public void Push(double[] stateVec, int actionIdx, double reward,
                      double[] nextStateVec, bool isTerminal)
@@ -47,7 +47,7 @@ public class ReplayBuffer
         if (_count < _capacity) _count++;
     }
 
-    // ── Push (legacy string-key path — kept for Q-table compat) ─────────────
+    // Push (legacy string-key path — kept for Q-table compat)
 
     public void Push(string stateKey, int actionIdx, double reward,
                      string nextStateKey, bool isTerminal = false)
@@ -65,7 +65,7 @@ public class ReplayBuffer
         if (_count < _capacity) _count++;
     }
 
-    // ── Sample ────────────────────────────────────────────────────────────────
+    // Sample
 
     public Transition[] Sample(int batchSize)
     {

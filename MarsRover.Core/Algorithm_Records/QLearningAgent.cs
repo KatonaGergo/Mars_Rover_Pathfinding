@@ -6,18 +6,18 @@ namespace MarsRover.Core.Algorithm;
 /// <summary>
 /// Tabular Q-Learning agent.
 ///
-/// TRAINING MODE: Runs many episodes with epsilon-greedy exploration.
-///                Call Train() offline before the live simulation.
+/// Training mode runs many episodes with epsilon-greedy exploration.
+/// Call Train() offline before the live simulation.
 ///
-/// EXPLOITATION MODE: Uses the trained Q-table to select the best action each tick.
-///                    Call SelectAction() during the live simulation.
+/// Exploitation mode uses the trained Q-table to select actions each tick.
+/// Call SelectAction() during the live simulation.
 /// </summary>
 public class QLearningAgent
 {
     private readonly QTable   _qTable;
     private readonly Random   _random;
 
-    // ── Epsilon-greedy parameters ────────────────────────────────────────────
+    // Epsilon-greedy parameters
     public double Epsilon        { get; set; } = 1.0;   // exploration rate
     public double EpsilonMin     { get; set; }          = 0.05;
     public double EpsilonDecay   { get; set; }          = 0.995; // multiplied each episode
@@ -30,7 +30,7 @@ public class QLearningAgent
         _random = new Random(seed);
     }
 
-    // ── Action selection ──────────────────────────────────────────────────────
+    // Action selection
 
     /// <summary>
     /// Epsilon-greedy action selection for training.
@@ -49,7 +49,7 @@ public class QLearningAgent
     public (RoverAction action, int actionIdx) SelectAction(QLearningState state)
         => SelectBestAction(state);
 
-    // ── Training ──────────────────────────────────────────────────────────────
+    // Training
 
     /// <summary>
     /// Trains the agent for the given number of episodes.
@@ -120,7 +120,7 @@ public class QLearningAgent
         return new TrainingResult(episodes, bestMinerals, results, _qTable.StateCount);
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // Private helpers
 
     private (RoverAction, int) SelectBestAction(QLearningState state)
     {
@@ -156,7 +156,7 @@ public class QLearningAgent
     }
 }
 
-// ── Data records ──────────────────────────────────────────────────────────────
+// Data records
 
 public record TrainingProgress(
     int              Episode,
