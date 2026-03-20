@@ -3,7 +3,7 @@ bin/
 obj/
 results/
 Saved_Models/
-_temp_build/
+tmp_build/
 .vscode/
 .cursor/
 .dotnet/
