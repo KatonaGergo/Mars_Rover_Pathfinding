@@ -14,7 +14,7 @@ namespace MarsRover.Console;
 /// </summary>
 public class AppConfig
 {
-    // ── Defaults ──────────────────────────────────────────────────────────────
+    // Defaults
     [JsonPropertyName("mapPath")]
     public string MapPath    { get; set; } = "Map/mars_map_50x50.csv";
 
@@ -27,7 +27,7 @@ public class AppConfig
     [JsonPropertyName("modelPath")]
     public string ModelPath  { get; set; } = "model";
 
-    // ── Load ──────────────────────────────────────────────────────────────────
+    // Load
 
     private static readonly JsonSerializerOptions _opts = new()
     {
@@ -72,7 +72,7 @@ public class AppConfig
         File.WriteAllText(configPath, JsonSerializer.Serialize(this, _opts));
     }
 
-    // ── CLI override ──────────────────────────────────────────────────────────
+    // CLI override
 
     /// <summary>
     /// Applies CLI flags on top of whatever was loaded from config.json.
@@ -118,7 +118,7 @@ public class AppConfig
         return true;
     }
 
-    // ── Validation ────────────────────────────────────────────────────────────
+    // Validation
 
     /// <summary>
     /// Checks all values are within legal ranges.
@@ -145,7 +145,7 @@ public class AppConfig
         return true;
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
     private static string? GetArg(string[] args, string flag)
     {

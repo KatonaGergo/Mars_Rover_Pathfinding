@@ -27,13 +27,15 @@ public partial class MainViewModel : ObservableObject
 
     private const int MinDurationHours = 24;
     private const int MaxDurationHours = 10000;
+    private const int MinTrainingEpisodes = 100;
+    private const int MaxTrainingEpisodes = 10000;
     private const double MinMapZoom = 1.0;
     private const double MaxMapZoom = 2.6;
     private const double MapZoomStep = 0.15;
 
     // Simulation state
     [ObservableProperty] private double? _durationHours  = 48;
-    [ObservableProperty] private int    _trainingEpisodes = 2000;
+    [ObservableProperty] private int?   _trainingEpisodes = 2000;
     [ObservableProperty] private double _playbackSpeed   = 1.0;
 
     [ObservableProperty] private bool   _isTraining      = false;
@@ -199,6 +201,15 @@ public partial class MainViewModel : ObservableObject
         double rounded = Math.Round(clamped, MidpointRounding.AwayFromZero);
         if (Math.Abs(rounded - rawValue) > double.Epsilon)
             DurationHours = rounded;
+    }
+    partial void OnTrainingEpisodesChanged(int? value)
+    {
+        if (!value.HasValue)
+            return;
+
+        int clamped = Math.Clamp(value.Value, MinTrainingEpisodes, MaxTrainingEpisodes);
+        if (clamped != value.Value)
+            TrainingEpisodes = clamped;
     }
 
     // Simulation chart series (playback)
@@ -447,6 +458,7 @@ public partial class MainViewModel : ObservableObject
         _isNavigatingAway = false;
         int runGeneration = ++_runGeneration;
         int durationHours = EnsureValidDurationHours();
+        int trainingEpisodes = EnsureValidTrainingEpisodes();
         bool shouldResumeModel = _modelLoadedManually || _allowResumeThisSession;
         bool resumeFromDisk = shouldResumeModel
                               && File.Exists(SimulationRunner.ResolveModelPath(_modelPath) + ".qtable.json");
@@ -487,7 +499,7 @@ public partial class MainViewModel : ObservableObject
             await Task.Run(() =>
             {
                 var (training, log) = runner.TrainAndRun(
-                    episodes: TrainingEpisodes,
+                    episodes: trainingEpisodes,
                     options: trainingOptions,
                     onProgress: p =>
                     {
@@ -551,7 +563,7 @@ public partial class MainViewModel : ObservableObject
                     string? logPath = null;
                     if (log.Count > 0 && GameMap != null)
                         logPath = MarsRover.Core.Utils.MissionLogger.Save(
-                            log, _mapPath, durationHours, TrainingEpisodes, _modelPath, GameMap);
+                            log, _mapPath, durationHours, trainingEpisodes, _modelPath, GameMap);
 
                     string completionStatus = $"✅ Training complete — " +
                                               $"{training.BestMinerals} peak minerals | " +
@@ -1424,6 +1436,17 @@ public partial class MainViewModel : ObservableObject
 
         if (!DurationHours.HasValue || Math.Abs(DurationHours.Value - clamped) > double.Epsilon)
             DurationHours = clamped;
+
+        return clamped;
+    }
+
+    private int EnsureValidTrainingEpisodes()
+    {
+        int currentValue = TrainingEpisodes ?? MinTrainingEpisodes;
+        int clamped = Math.Clamp(currentValue, MinTrainingEpisodes, MaxTrainingEpisodes);
+
+        if (!TrainingEpisodes.HasValue || TrainingEpisodes.Value != clamped)
+            TrainingEpisodes = clamped;
 
         return clamped;
     }

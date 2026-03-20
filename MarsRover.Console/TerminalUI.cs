@@ -20,7 +20,7 @@ public enum MainMenuResult { StartMission, SystemStatus, Exit }
 /// </summary>
 public static class TerminalUI
 {
-    // ── Layout ────────────────────────────────────────────────────────────────
+    // Layout
     private const int W        = 80;
     private const int MarsW    = 23;
     private const int MarsH    = 11;
@@ -36,7 +36,7 @@ public static class TerminalUI
     private const int R_Status = R_Sep2  + 1;           // 27
     private const int R_Hint   = R_Status + 1;          // 28
 
-    // ── Mars sphere geometry ──────────────────────────────────────────────────
+    // Mars sphere geometry
     // Column range [L, R] (inclusive) per planet row — defines the sphere mask
     private static readonly (int L, int R)[] Mask = new (int L, int R)[]
     {
@@ -71,7 +71,7 @@ public static class TerminalUI
         "░▓▒░░▒▒▓▓░░▒▒░░▒▓▒░░▒▒▓▓░░▒▒░░▒▓▒░░▒▒▓▓░░▒▒░░▒",
     };
 
-    // ── Star field (fixed, generated once in static constructor) ──────────────
+    // Star field (fixed, generated once in static constructor)
     private static readonly (int row, int col, char g)[] Stars;
     private static readonly Random _rng = new(Environment.TickCount);
 
@@ -99,9 +99,9 @@ public static class TerminalUI
         Stars = list.ToArray();
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // BOOT / LOADING SCREEN
-    // ═════════════════════════════════════════════════════════════════════════
+
+    // Boot and loading screen
+
 
     public static void RunLoadingScreen()
     {
@@ -197,9 +197,9 @@ public static class TerminalUI
         }
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // MAIN MENU
-    // ═════════════════════════════════════════════════════════════════════════
+
+    // Main menu
+
 
     // Menu items: label (padded for uniform width), description shown below panel
     private static readonly (string lbl, string desc)[] Items = new (string lbl, string desc)[]
@@ -277,7 +277,7 @@ public static class TerminalUI
         return result.Value;
     }
 
-    // ── Animation loop (background thread) ───────────────────────────────────
+    // Animation loop (background thread)
 
     private static void AnimLoop(MenuState state, CancellationToken ct)
     {
@@ -295,16 +295,16 @@ public static class TerminalUI
         {
             var t0 = DateTime.Now;
 
-            // ── Rotate Mars ───────────────────────────────────────────────
+            // Rotate Mars
             DrawPlanet(marsOff);
             marsOff = (marsOff + 1) % 48;
 
-            // ── Breathe OFFLINE indicator ─────────────────────────────────
+            // Breathe OFFLINE indicator
             breath += 0.09f;
             if (breath >= MathF.Tau) breath -= MathF.Tau;
             DrawOffline(breath);
 
-            // ── Fluctuate signal bars ─────────────────────────────────────
+            // Fluctuate signal bars
             if (_rng.Next(9) == 0)
                 sigBars = Math.Clamp(sigBars + _rng.Next(-1, 2), 3, 8);
             DrawStatusBar(sigBars, StatusCycle[statIdx]);
@@ -317,12 +317,12 @@ public static class TerminalUI
                 statIdx  = (statIdx + 1) % StatusCycle.Length;
             }
 
-            // ── Screen glitch (occasional, self-healing) ──────────────────
+            // Screen glitch (occasional, self-healing)
             // Only corrupts planet rows — the planet redraws fix it next frame
             if (_rng.Next(55) == 0)
                 DrawGlitch();
 
-            // ── Redraw menu panel only when navigation changes it ─────────
+            // Redraw menu panel only when navigation changes it
             if (state.NeedButtons)
             {
                 state.NeedButtons = false;
@@ -336,7 +336,7 @@ public static class TerminalUI
         }
     }
 
-    // ── Static elements (drawn once at menu entry) ────────────────────────────
+    // Static elements (drawn once at menu entry)
 
     private static void DrawStatic(MenuState state)
     {
@@ -369,7 +369,7 @@ public static class TerminalUI
         DrawMenuPanel(state.Sel);
     }
 
-    // ── Mars planet ───────────────────────────────────────────────────────────
+    // Mars planet
 
     private static void DrawPlanet(int offset)
     {
@@ -412,7 +412,7 @@ public static class TerminalUI
         System.Console.ResetColor();
     }
 
-    // ── OFFLINE breathing indicator ───────────────────────────────────────────
+    // OFFLINE breathing indicator
 
     private static void DrawOffline(float phase)
     {
@@ -430,7 +430,7 @@ public static class TerminalUI
         WA(R_Header, 2, $"{dot} OFFLINE", col);
     }
 
-    // ── Menu panel (drawn on demand) ──────────────────────────────────────────
+    // Menu panel (drawn on demand)
 
     private static void DrawMenuPanel(int sel)
     {
@@ -478,7 +478,7 @@ public static class TerminalUI
         WA(R_Desc, 0, Center(desc).PadRight(W), ConsoleColor.DarkGray);
     }
 
-    // ── Status bar ────────────────────────────────────────────────────────────
+    // Status bar
 
     private static void DrawStatusBar(int bars, string statusMsg)
     {
@@ -498,7 +498,7 @@ public static class TerminalUI
         WA(R_Status, 62, $"LATENCY: 14m {latency}s",     ConsoleColor.DarkGray);
     }
 
-    // ── Screen glitch ─────────────────────────────────────────────────────────
+    // Screen glitch
     // Corrupts a few chars on a random planet row for exactly one frame.
     // The planet redraw next frame automatically heals it.
 
@@ -526,7 +526,7 @@ public static class TerminalUI
         catch { /* ignore out-of-bounds on small terminals */ }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Helpers
 
     /// <summary>Write text at absolute (col, row) position, clamped to window.</summary>
     private static void WA(int row, int col, string text, ConsoleColor color)

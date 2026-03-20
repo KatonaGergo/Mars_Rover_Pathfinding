@@ -5,10 +5,10 @@ namespace MarsRover.Core.Simulation;
 /// <summary>
 /// 8-directional A* pathfinder for the Mars map.
 ///
-/// UNIFORM MOVEMENT COST:
-///   All moves (cardinal and diagonal) cost 1 movement point.
-///   This matches the free-movement model: Fast=3 points/tick can be spent
-///   in any combination of directions (e.g. North, North, East).
+/// Uniform movement cost:
+/// all moves (cardinal and diagonal) cost 1 movement point.
+/// This matches the free-movement model where Fast=3 points/tick can be spent
+/// in any combination of directions (for example North, North, East).
 ///
 /// Heuristic: Chebyshev distance — exact for uniform 8-directional cost.
 ///   h(n) = max(|dx|, |dy|) = minimum steps needed in any direction guaranteeing optimal paths.
@@ -20,7 +20,7 @@ public static class AStarPathfinder
     private static readonly Direction[] Directions = Enum.GetValues<Direction>();
     private static readonly bool[] IsCardinal = [true, false, true, false, true, false, true, false];
 
-    // ── Public API ────────────────────────────────────────────────────────────
+    // Public API
 
     /// <summary>
     /// Finds the shortest path from (startX,startY) to (goalX,goalY).
@@ -148,7 +148,7 @@ public static class AStarPathfinder
         return dist;
     }
 
-    // ── Heuristic ─────────────────────────────────────────────────────────────
+    // Heuristic
 
     /// <summary>
     /// Chebyshev distance for 8-directional movement.
@@ -157,7 +157,7 @@ public static class AStarPathfinder
     public static double Heuristic(int x1, int y1, int x2, int y2)
         => Math.Max(Math.Abs(x1 - x2), Math.Abs(y1 - y2));
 
-    // ── Path reconstruction ───────────────────────────────────────────────────
+    // Path reconstruction
 
     private static List<PathStep> ReconstructPath(
         Dictionary<(int, int), (int px, int py, Direction dir)> cameFrom,
@@ -176,7 +176,7 @@ public static class AStarPathfinder
         return steps;
     }
 
-    // ── Private types ─────────────────────────────────────────────────────────
+    // Private types
 
     private static bool TryStep(GameMap map, int x, int y, Direction dir, out int nx, out int ny)
     {

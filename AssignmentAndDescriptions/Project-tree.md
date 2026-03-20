@@ -45,6 +45,7 @@ Mars_Rover_Pathfinding
 │  │  ├─ EnergyCalculator.cs
 │  │  ├─ GameMap.cs
 │  │  └─ SimulationEngine.cs
+│  ├─ tmp_build
 │  └─ Utils
 │     ├─ MapGenerator.cs
 │     └─ MissionLogger.cs
@@ -65,31 +66,41 @@ Mars_Rover_Pathfinding
 │  │  ├─ logo.png
 │  │  ├─ MainScreenSound (FROM GTA Online).mp3
 │  │  ├─ MarsBack.png
+│  │  ├─ MarsSurface.jpg
 │  │  ├─ MarsSurface.png
+│  │  ├─ MarsSurfaceScannerMap.png
 │  │  ├─ MarsTheme.axaml
 │  │  ├─ MenuScreenLogo.png
 │  │  ├─ Models
+│  │  │  ├─ akadaly.png
 │  │  │  ├─ blend
+│  │  │  ├─ kekasvany.png
 │  │  │  ├─ KékÁsvány.blend
+│  │  │  ├─ rover.png
+│  │  │  ├─ rover2.png
+│  │  │  ├─ sargaasvany.png
 │  │  │  ├─ Szikla.blend
 │  │  │  ├─ SárgaÁsvány.blend
+│  │  │  ├─ zoldasvany.png
 │  │  │  └─ ZöldÁsvány.blend
 │  │  ├─ moon.png
 │  │  ├─ realativo.png
 │  │  ├─ SoundFXs
-│  │  │  ├─ LaunchingMission.mkv
-│  │  │  ├─ LoadingSound.mkv
-│  │  │  ├─ RestrictedSound.mkv
-│  │  │  ├─ StepBackSound.mkv
-│  │  │  ├─ StepInSound.mkv
-│  │  │  └─ SwitchSound.mkv
+│  │  │  ├─ LaunchingMission.mp3
+│  │  │  ├─ LoadingSound.mp3
+│  │  │  ├─ RestrictedSound.mp3
+│  │  │  ├─ StepBackSound.mp3
+│  │  │  ├─ StepInSound.mp3
+│  │  │  └─ SwitchSound.mp3
 │  │  ├─ sun.png
 │  │  └─ WhiteNoiseSpace.m4a
 │  ├─ Controls
-│  │  └─ MapCanvas.cs
+│  │  ├─ MapCanvas.cs
+│  │  └─ SurfaceScannerCanvas.cs
 │  ├─ MarsRover.UI.csproj
 │  ├─ MarsRover.UI.sln
 │  ├─ Program.cs
+│  ├─ tmp_build
 │  ├─ UiDisplaySettings.cs
 │  ├─ ViewModels
 │  │  └─ MainViewModel.cs
@@ -98,9 +109,9 @@ Mars_Rover_Pathfinding
 │     ├─ MainWindow.axaml.cs
 │     ├─ MenuWindow.axaml
 │     └─ MenuWindow.axaml.cs
+├─ mars_rover_procedure-pseudo.pdf
 ├─ Project-tree.md
 ├─ Readme.txt
-├─ Theoretical-Maximum-Calculator.txt
 └─ tmp_build
    └─ Debug
       └─ net8.0

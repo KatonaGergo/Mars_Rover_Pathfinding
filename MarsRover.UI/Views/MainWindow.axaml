@@ -82,6 +82,8 @@
                             <TextBlock Text="EPISODES" Classes="label"/>
                             <NumericUpDown Value="{Binding TrainingEpisodes}"
                                        Minimum="100" Maximum="10000"
+                                       ClipValueToMinMax="True"
+                                       ParsingNumberStyle="Integer"
                                        Width="120" FontSize="13"/>
                         </StackPanel>
                         <Button Content="▶ TRAIN &amp; RUN" Classes="primary"
