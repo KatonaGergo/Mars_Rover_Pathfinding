@@ -27,6 +27,9 @@ public partial class MainViewModel : ObservableObject
 
     private const int MinDurationHours = 24;
     private const int MaxDurationHours = 10000;
+    private const double MinMapZoom = 1.0;
+    private const double MaxMapZoom = 2.6;
+    private const double MapZoomStep = 0.15;
 
     // ── Simulation state ─────────────────────────────────────────────────────
     [ObservableProperty] private double? _durationHours  = 48;
@@ -71,6 +74,12 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _mapLoadScannerJumpTrigger = 0;
     [ObservableProperty] private bool _isMapScannerTargetActive = false;
     [ObservableProperty] private bool _isMapScannerHudVisible = false;
+    [ObservableProperty] private double _mapZoom = 1.0;
+    [ObservableProperty] private double _mapCameraCenterX = 0.5;
+    [ObservableProperty] private double _mapCameraCenterY = 0.5;
+    [ObservableProperty] private double _mapZoomFxFocusX = 0.5;
+    [ObservableProperty] private double _mapZoomFxFocusY = 0.5;
+    [ObservableProperty] private int _mapZoomFxTrigger = 0;
     public bool IsMineralsFoundPromptVisible => ShowMineralsFoundPrompt;
     public string MineralsFoundCountdownText => Math.Max(MineralsFoundCountdown, 0).ToString();
     private string _modelPath = "q_table"; // base path — runner appends .weights.json / .meta.json
@@ -125,8 +134,8 @@ public partial class MainViewModel : ObservableObject
     public bool ShowMapView => !ShowTrainingChart && !ShowGhostReplay;
 
     partial void OnShowTrainingChartChanged(bool value) => OnPropertyChanged(nameof(ShowMapView));
-    partial void OnShowGhostReplayChanged(bool value)   => OnPropertyChanged(nameof(ShowMapView));
-        partial void OnShowMineralsFoundPromptChanged(bool value) => OnPropertyChanged(nameof(IsMineralsFoundPromptVisible));
+    partial void OnShowGhostReplayChanged(bool value) => OnPropertyChanged(nameof(ShowMapView));
+    partial void OnShowMineralsFoundPromptChanged(bool value) => OnPropertyChanged(nameof(IsMineralsFoundPromptVisible));
     partial void OnMineralsFoundCountdownChanged(int value) => OnPropertyChanged(nameof(MineralsFoundCountdownText));
     partial void OnGameMapChanged(GameMap? value)
     {
@@ -156,6 +165,24 @@ public partial class MainViewModel : ObservableObject
     partial void OnIsFullExcavationRunningChanged(bool value) => OnPropertyChanged(nameof(CanRunFullExcavation));
     partial void OnIsPausedChanged(bool value) => OnPropertyChanged(nameof(PauseButtonContent));
     partial void OnIsRunningChanged(bool value) => OnPropertyChanged(nameof(PauseButtonContent));
+    partial void OnMapZoomChanged(double value)
+    {
+        double clamped = ClampMapZoom(value);
+        if (Math.Abs(clamped - value) > double.Epsilon)
+            MapZoom = clamped;
+    }
+    partial void OnMapCameraCenterXChanged(double value)
+    {
+        double clamped = ClampUnit(value);
+        if (Math.Abs(clamped - value) > double.Epsilon)
+            MapCameraCenterX = clamped;
+    }
+    partial void OnMapCameraCenterYChanged(double value)
+    {
+        double clamped = ClampUnit(value);
+        if (Math.Abs(clamped - value) > double.Epsilon)
+            MapCameraCenterY = clamped;
+    }
     partial void OnDurationHoursChanged(double? value)
     {
         if (!value.HasValue)
@@ -738,6 +765,34 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ZoomInMap()
+    {
+        AdjustMapZoomBySteps(1, 0.5, 0.5, anchorToFocus: true);
+    }
+
+    [RelayCommand]
+    private void ZoomOutMap()
+    {
+        AdjustMapZoomBySteps(-1, 0.5, 0.5, anchorToFocus: true);
+    }
+
+    [RelayCommand]
+    private void ResetMapZoom()
+    {
+        if (!HasMapLoaded) return;
+        bool changed = Math.Abs(MapZoom - MinMapZoom) > double.Epsilon;
+        MapZoom = MinMapZoom;
+        if (changed)
+            TriggerZoomFx(0.5, 0.5);
+    }
+
+    public void AdjustMapZoomFromWheel(double deltaY, double focusX, double focusY)
+    {
+        if (!HasMapLoaded || deltaY == 0) return;
+        AdjustMapZoomBySteps(deltaY > 0 ? 1 : -1, focusX, focusY, anchorToFocus: true);
+    }
+
+    [RelayCommand]
     private async Task RunFullExcavation()
     {
         if (GameMap == null)
@@ -921,6 +976,9 @@ public partial class MainViewModel : ObservableObject
             _mapPath = path;
             RoverX  = GameMap.StartX;
             RoverY  = GameMap.StartY;
+            MapZoom = MinMapZoom;
+            MapCameraCenterX = 0.5;
+            MapCameraCenterY = 0.5;
             TrainingStatus = $"Map loaded — {System.IO.Path.GetFileName(path)} " +
                              $"| {GameMap.RemainingMinerals.Count} minerals";
             ResetDisplayToStart();
@@ -1531,6 +1589,72 @@ public partial class MainViewModel : ObservableObject
 
     private static double Lerp(double from, double to, double t)
         => from + ((to - from) * t);
+
+    private void AdjustMapZoomBySteps(int stepDirection, double focusX, double focusY, bool anchorToFocus)
+    {
+        if (!HasMapLoaded || stepDirection == 0)
+            return;
+
+        double oldZoom = ClampMapZoom(MapZoom);
+        double newZoom = ClampMapZoom(oldZoom + (stepDirection * MapZoomStep));
+        if (Math.Abs(newZoom - oldZoom) <= double.Epsilon)
+            return;
+
+        double fx = ClampUnit(focusX);
+        double fy = ClampUnit(focusY);
+
+        if (anchorToFocus)
+        {
+            const double mapWidth = MarsRover.Core.Simulation.GameMap.Width;
+            const double mapHeight = MarsRover.Core.Simulation.GameMap.Height;
+
+            double oldViewportW = mapWidth / oldZoom;
+            double oldViewportH = mapHeight / oldZoom;
+            double oldLeft = CalculateViewportOrigin(MapCameraCenterX, oldViewportW, mapWidth);
+            double oldTop = CalculateViewportOrigin(MapCameraCenterY, oldViewportH, mapHeight);
+
+            double worldX = oldLeft + (fx * oldViewportW);
+            double worldY = oldTop + (fy * oldViewportH);
+
+            double newViewportW = mapWidth / newZoom;
+            double newViewportH = mapHeight / newZoom;
+            double newLeft = Math.Clamp(worldX - (fx * newViewportW), 0, mapWidth - newViewportW);
+            double newTop = Math.Clamp(worldY - (fy * newViewportH), 0, mapHeight - newViewportH);
+
+            MapCameraCenterX = ClampUnit((newLeft + (newViewportW * 0.5)) / mapWidth);
+            MapCameraCenterY = ClampUnit((newTop + (newViewportH * 0.5)) / mapHeight);
+        }
+
+        MapZoom = newZoom;
+        TriggerZoomFx(fx, fy);
+    }
+
+    private static double CalculateViewportOrigin(double centerNormalized, double viewportSize, double mapSize)
+    {
+        double center = ClampUnit(centerNormalized) * mapSize;
+        return Math.Clamp(center - (viewportSize * 0.5), 0, mapSize - viewportSize);
+    }
+
+    private void TriggerZoomFx(double focusX, double focusY)
+    {
+        MapZoomFxFocusX = ClampUnit(focusX);
+        MapZoomFxFocusY = ClampUnit(focusY);
+        MapZoomFxTrigger++;
+    }
+
+    private static double ClampMapZoom(double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return MinMapZoom;
+        return Math.Clamp(value, MinMapZoom, MaxMapZoom);
+    }
+
+    private static double ClampUnit(double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return 0.5;
+        return Math.Clamp(value, 0.0, 1.0);
+    }
 
     private static string FormatGhostStatus(MarsRover.Core.Algorithm.EpisodeSnapshot snap)
         => $"Episode {snap.Episode} | {snap.MineralsCollected} minerals | " +

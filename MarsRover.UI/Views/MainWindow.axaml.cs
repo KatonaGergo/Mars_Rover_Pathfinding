@@ -222,6 +222,18 @@ public partial class MainWindow : Window
             BeginMoveDrag(e);
     }
 
+    private void MapViewport_OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && sender is Control control && control.Bounds.Width > 0 && control.Bounds.Height > 0)
+        {
+            var pos = e.GetPosition(control);
+            double focusX = Math.Clamp(pos.X / control.Bounds.Width, 0.0, 1.0);
+            double focusY = Math.Clamp(pos.Y / control.Bounds.Height, 0.0, 1.0);
+            vm.AdjustMapZoomFromWheel(e.Delta.Y, focusX, focusY);
+            e.Handled = true;
+        }
+    }
+
     internal Border GetTransitionGlowForCrossFade() => _transitionGlowLayer;
 
     private void OnMainWindowOpened(object? sender, EventArgs e)
@@ -414,4 +426,3 @@ public partial class MainWindow : Window
         }
     }
 }
-
