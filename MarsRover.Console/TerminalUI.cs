@@ -271,13 +271,12 @@ public static class TerminalUI
         }
 
         cts.Cancel();
-        try { anim.Wait(700); } catch { /* intentional — just let it die */ }
+        try { anim.Wait(700); } catch {}
 
         System.Console.CursorVisible = true;
         return result.Value;
     }
 
-    // Animation loop (background thread)
 
     private static void AnimLoop(MenuState state, CancellationToken ct)
     {
@@ -289,27 +288,23 @@ public static class TerminalUI
         int   statIdx  = 0;
         int   statTick = 0;
 
-        DrawStatic(state);   // draw everything that doesn't change each frame
+        DrawStatic(state);
 
         while (!ct.IsCancellationRequested)
         {
             var t0 = DateTime.Now;
 
-            // Rotate Mars
             DrawPlanet(marsOff);
             marsOff = (marsOff + 1) % 48;
 
-            // Breathe OFFLINE indicator
             breath += 0.09f;
             if (breath >= MathF.Tau) breath -= MathF.Tau;
             DrawOffline(breath);
 
-            // Fluctuate signal bars
             if (_rng.Next(9) == 0)
                 sigBars = Math.Clamp(sigBars + _rng.Next(-1, 2), 3, 8);
             DrawStatusBar(sigBars, StatusCycle[statIdx]);
 
-            // Cycle status message every ~50 frames (~4 s)
             statTick++;
             if (statTick >= 50)
             {
@@ -317,59 +312,53 @@ public static class TerminalUI
                 statIdx  = (statIdx + 1) % StatusCycle.Length;
             }
 
-            // Screen glitch (occasional, self-healing)
-            // Only corrupts planet rows — the planet redraws fix it next frame
+
             if (_rng.Next(55) == 0)
                 DrawGlitch();
 
-            // Redraw menu panel only when navigation changes it
             if (state.NeedButtons)
             {
                 state.NeedButtons = false;
                 DrawMenuPanel(state.Sel);
             }
 
-            // Frame timing
             int elapsed = (int)(DateTime.Now - t0).TotalMilliseconds;
             int sleep   = Math.Max(1, FrameMs - elapsed);
             try { Task.Delay(sleep, ct).Wait(ct); } catch { break; }
         }
     }
 
-    // Static elements (drawn once at menu entry)
 
     private static void DrawStatic(MenuState state)
     {
-        // Header separator
+
         WA(R_Sep1, 0, new string('━', W), ConsoleColor.DarkRed);
 
-        // Header center title
+ 
         WA(R_Header, 0,
            Center("·· MARS MISSION TERMINAL  ·  SYS-7  v2.4 ··"),
            ConsoleColor.DarkRed);
 
-        // Stars around the planet
         foreach (var (row, col, g) in Stars)
             WA(row, col, g.ToString(), ConsoleColor.DarkGray);
 
-        // Title block
         WA(R_Title,     0, Center("──  ·  M A R S   R O V E R  ·  ──"),  ConsoleColor.Red);
         WA(R_Title + 1, 0, Center("Q-Learning Pathfinding Agent"),        ConsoleColor.DarkRed);
         WA(R_Title + 2, 0, Center("MISSION CONTROL  ·  SYS-7  v2.4"),     ConsoleColor.DarkRed);
 
-        // Bottom separator
+
         WA(R_Sep2, 0, new string('━', W), ConsoleColor.DarkRed);
 
-        // Navigation hint
+
         WA(R_Hint, 0,
            Center("↑/↓  NAVIGATE    ·    ENTER  CONFIRM    ·    ESC  ABORT"),
            ConsoleColor.DarkGray);
 
-        // Draw initial buttons
+
         DrawMenuPanel(state.Sel);
     }
 
-    // Mars planet
+
 
     private static void DrawPlanet(int offset)
     {
@@ -390,12 +379,10 @@ public static class TerminalUI
                     continue;
                 }
 
-                // Sample texture with rotation offset
                 string tex    = Tex[py];
                 char   c      = tex[(px + offset) % tex.Length];
 
-                // Sphere shading: edges are darker than the lit centre
-                float  dist   = Math.Abs(px - mid) / (float)half;   // 0=centre, 1=edge
+                float  dist   = Math.Abs(px - mid) / (float)half; 
                 bool   bright = dist < 0.55f;
 
                 ConsoleColor col = c switch
@@ -412,11 +399,11 @@ public static class TerminalUI
         System.Console.ResetColor();
     }
 
-    // OFFLINE breathing indicator
+
 
     private static void DrawOffline(float phase)
     {
-        // sin ∈ [-1, 1] → brightness ∈ [0, 1]
+
         float b = (MathF.Sin(phase) + 1f) / 2f;
 
         (string dot, ConsoleColor col) = b switch
@@ -430,7 +417,7 @@ public static class TerminalUI
         WA(R_Header, 2, $"{dot} OFFLINE", col);
     }
 
-    // Menu panel (drawn on demand)
+
 
     private static void DrawMenuPanel(int sel)
     {
@@ -449,12 +436,10 @@ public static class TerminalUI
             bool   active  = i == sel;
             string lbl     = Items[i].lbl;
 
-            // Left border
             WA(itemRow, col, "║", ConsoleColor.DarkRed);
 
             if (active)
             {
-                // Highlight: red ► then yellow label
                 WA(itemRow, col + 1, " ►", ConsoleColor.Red);
                 WA(itemRow, col + 3, lbl.PadRight(PW - 4), ConsoleColor.Yellow);
             }
@@ -463,22 +448,18 @@ public static class TerminalUI
                 WA(itemRow, col + 1, ("   " + lbl.TrimStart()).PadRight(PW - 2), ConsoleColor.DarkRed);
             }
 
-            // Right border
             WA(itemRow, col + PW - 1, "║", ConsoleColor.DarkRed);
 
-            // Divider (not after last item)
             if (i < Items.Length - 1)
                 WA(R_Menu + 2 + i * 2, col, div, ConsoleColor.DarkRed);
         }
 
         WA(R_Menu + 1 + (Items.Length - 1) * 2 + 1, col, bot, ConsoleColor.DarkRed);
 
-        // Description line below panel
         string desc = Items[sel].desc;
         WA(R_Desc, 0, Center(desc).PadRight(W), ConsoleColor.DarkGray);
     }
 
-    // Status bar
 
     private static void DrawStatusBar(int bars, string statusMsg)
     {
@@ -498,10 +479,6 @@ public static class TerminalUI
         WA(R_Status, 62, $"LATENCY: 14m {latency}s",     ConsoleColor.DarkGray);
     }
 
-    // Screen glitch
-    // Corrupts a few chars on a random planet row for exactly one frame.
-    // The planet redraw next frame automatically heals it.
-
     private static readonly char[] GlitchSet =
         "▓▒░█▄▀■□◆○●◉①②③0xFFDE4B8A".ToCharArray();
 
@@ -511,7 +488,6 @@ public static class TerminalUI
         int row = R_Mars + py;
         (int L, int R) = Mask[py];
 
-        // Random segment within or just outside the sphere on this row
         int startPx = _rng.Next(Math.Max(0, L - 4), Math.Min(W - 1, R + 4));
         int len     = _rng.Next(3, 9);
 
@@ -523,7 +499,7 @@ public static class TerminalUI
                 System.Console.Write(GlitchSet[_rng.Next(GlitchSet.Length)]);
             System.Console.ResetColor();
         }
-        catch { /* ignore out-of-bounds on small terminals */ }
+        catch {}
     }
 
     // Helpers
@@ -543,7 +519,7 @@ public static class TerminalUI
             System.Console.Write(safe);
             System.Console.ResetColor();
         }
-        catch { /* small terminal — skip */ }
+        catch {}
     }
 
     private static string Center(string text)

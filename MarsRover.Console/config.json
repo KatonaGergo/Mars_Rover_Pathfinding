@@ -1,0 +1,6 @@
+{
+  "mapPath": "Map/mars_map_50x50.csv",
+  "hours": 48,
+  "episodes": 2000,
+  "modelPath": "model"
+}
