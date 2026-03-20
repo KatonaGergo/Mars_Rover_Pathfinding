@@ -3,8 +3,8 @@
         x:Class="MarsRover.UI.Views.MenuWindow"
         Width="1460"
         Height="900"
-        MinWidth="1100"
-        MinHeight="700"
+        MinWidth="760"
+        MinHeight="620"
         CanResize="True"
         WindowStartupLocation="CenterScreen"
         SystemDecorations="None"
@@ -369,7 +369,9 @@
                    Foreground="#FFF2BB8D"
                    FontSize="14"
                    VerticalAlignment="Center"
-                   Margin="35,0,15,0" /> <Slider Minimum="0" Maximum="100" Value="50" 
+                   Margin="35,0,15,0" />
+        <Slider x:Name="MenuMusicVolumeSlider"
+                Minimum="0" Maximum="100" Value="50" 
                 Width="200" 
                 VerticalAlignment="Center"
                 ValueChanged="VolumeChanged">
@@ -384,6 +386,56 @@
                                       <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver">#EF7E2A</SolidColorBrush>
                              <SolidColorBrush x:Key="SliderThumbBackgroundPressed">#EF7E2A</SolidColorBrush> 
                              </Slider.Resources>
+        </Slider>
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBlock Text="Mission Main Volume"
+                   Foreground="#FFF2BB8D"
+                   FontSize="14"
+                   VerticalAlignment="Center"
+                   Margin="35,0,15,0" />
+        <Slider x:Name="MissionMainVolumeSlider"
+                Minimum="0" Maximum="100" Value="60"
+                Width="200"
+                VerticalAlignment="Center"
+                ValueChanged="MissionMainVolumeChanged">
+            <Slider.Resources>
+                <SolidColorBrush x:Key="SliderTrackFill">Gray</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderTrackFillPointerOver">Gray</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderTrackFillPressed">Gray</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderTrackValueFill">#EF7E2A</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderTrackValueFillPointerOver">#EF7E2A</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderTrackValueFillPressed">#EF7E2A</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderThumbBackground">#EF7E2A</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver">#EF7E2A</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderThumbBackgroundPressed">#EF7E2A</SolidColorBrush>
+            </Slider.Resources>
+        </Slider>
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBlock Text="Mission Noise Volume"
+                   Foreground="#FFF2BB8D"
+                   FontSize="14"
+                   VerticalAlignment="Center"
+                   Margin="35,0,15,0" />
+        <Slider x:Name="MissionWhiteNoiseVolumeSlider"
+                Minimum="0" Maximum="100" Value="50"
+                Width="200"
+                VerticalAlignment="Center"
+                ValueChanged="MissionWhiteNoiseVolumeChanged">
+            <Slider.Resources>
+                <SolidColorBrush x:Key="SliderTrackFill">Gray</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderTrackFillPointerOver">Gray</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderTrackFillPressed">Gray</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderTrackValueFill">#EF7E2A</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderTrackValueFillPointerOver">#EF7E2A</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderTrackValueFillPressed">#EF7E2A</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderThumbBackground">#EF7E2A</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver">#EF7E2A</SolidColorBrush>
+                <SolidColorBrush x:Key="SliderThumbBackgroundPressed">#EF7E2A</SolidColorBrush>
+            </Slider.Resources>
         </Slider>
     </StackPanel>
 

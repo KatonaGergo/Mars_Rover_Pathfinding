@@ -7,7 +7,7 @@
         x:DataType="vm:MainViewModel"
         Title="MARS ROVER — Q-Learning Pathfinding Agent"
         Width="1400" Height="900"
-        MinWidth="920" MinHeight="620"
+        MinWidth="760" MinHeight="620"
         SystemDecorations="None"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaChromeHints="NoChrome"

@@ -51,6 +51,9 @@ public partial class MenuWindow : Window
     private Border _transitionGlowLayer = null!;
     private Border _settingsOverlay = null!;
     private CheckBox _fullscreenModeCheckBox = null!;
+    private Slider _menuMusicVolumeSlider = null!;
+    private Slider _missionMainVolumeSlider = null!;
+    private Slider _missionWhiteNoiseVolumeSlider = null!;
     private VideoView? _videoView;
 
     private LibVLC? _libVlc;
@@ -98,8 +101,18 @@ public partial class MenuWindow : Window
             ?? throw new InvalidOperationException("SettingsOverlay not found.");
         _fullscreenModeCheckBox = this.FindControl<CheckBox>("FullscreenModeCheckBox")
             ?? throw new InvalidOperationException("FullscreenModeCheckBox not found.");
+        _menuMusicVolumeSlider = this.FindControl<Slider>("MenuMusicVolumeSlider")
+            ?? throw new InvalidOperationException("MenuMusicVolumeSlider not found.");
+        _missionMainVolumeSlider = this.FindControl<Slider>("MissionMainVolumeSlider")
+            ?? throw new InvalidOperationException("MissionMainVolumeSlider not found.");
+        _missionWhiteNoiseVolumeSlider = this.FindControl<Slider>("MissionWhiteNoiseVolumeSlider")
+            ?? throw new InvalidOperationException("MissionWhiteNoiseVolumeSlider not found.");
 
         _fullscreenModeCheckBox.IsChecked = UiDisplaySettings.FullscreenEnabled;
+        _musicVolume = UiAudioSettings.MenuMusicVolume;
+        _menuMusicVolumeSlider.Value = _musicVolume;
+        _missionMainVolumeSlider.Value = UiAudioSettings.MainScreenVolume;
+        _missionWhiteNoiseVolumeSlider.Value = UiAudioSettings.WhiteNoiseVolume;
 
         BuildSignalSegments();
         UpdateSignalSegments(_signalLevel);
@@ -490,6 +503,9 @@ public partial class MenuWindow : Window
     private void Settings_OnClick(object? sender, RoutedEventArgs e)
     {
         _fullscreenModeCheckBox.IsChecked = UiDisplaySettings.FullscreenEnabled;
+        _menuMusicVolumeSlider.Value = UiAudioSettings.MenuMusicVolume;
+        _missionMainVolumeSlider.Value = UiAudioSettings.MainScreenVolume;
+        _missionWhiteNoiseVolumeSlider.Value = UiAudioSettings.WhiteNoiseVolume;
         _settingsOverlay.IsVisible = !_settingsOverlay.IsVisible;
     }
 
@@ -553,10 +569,21 @@ public partial class MenuWindow : Window
     public void VolumeChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
         _musicVolume = (byte)Math.Clamp(e.NewValue, 0, 100);
+        UiAudioSettings.MenuMusicVolume = _musicVolume;
         if (!_isClosing)
         {
             _musicPlayer.SetVolume(_musicVolume);
         }
+    }
+
+    public void MissionMainVolumeChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        UiAudioSettings.MainScreenVolume = (byte)Math.Clamp(e.NewValue, 0, 100);
+    }
+
+    public void MissionWhiteNoiseVolumeChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        UiAudioSettings.WhiteNoiseVolume = (byte)Math.Clamp(e.NewValue, 0, 100);
     }
 
     private static async Task CrossFadeWindowsAsync(Window from, Window to, Border? fromGlow, Border? toGlow)

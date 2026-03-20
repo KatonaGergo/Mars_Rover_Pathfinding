@@ -284,8 +284,8 @@ public partial class MainWindow : Window
             _whiteNoiseAudioMedia = new Media(_audioLibVlc, new Uri(_whiteNoiseSpacePath));
             _whiteNoiseAudioMedia.AddOption(":input-repeat=-1");
 
-            _mainScreenAudioPlayer.Volume = 60;
-            _whiteNoiseAudioPlayer.Volume = 50;
+            _mainScreenAudioPlayer.Volume = UiAudioSettings.MainScreenVolume;
+            _whiteNoiseAudioPlayer.Volume = UiAudioSettings.WhiteNoiseVolume;
 
             _mainScreenAudioPlayer.Play(_mainScreenAudioMedia);
             _whiteNoiseAudioPlayer.Play(_whiteNoiseAudioMedia);
@@ -399,13 +399,13 @@ public partial class MainWindow : Window
 
         if (!string.IsNullOrWhiteSpace(_mainScreenSoundPath) && !_fallbackMainScreenPlayer.Playing)
         {
-            _fallbackMainScreenPlayer.SetVolume(55);
+            _fallbackMainScreenPlayer.SetVolume(UiAudioSettings.MainScreenVolume);
             _ = _fallbackMainScreenPlayer.Play(_mainScreenSoundPath);
         }
 
         if (!string.IsNullOrWhiteSpace(_whiteNoiseSpacePath) && !_fallbackWhiteNoisePlayer.Playing)
         {
-            _fallbackWhiteNoisePlayer.SetVolume(35);
+            _fallbackWhiteNoisePlayer.SetVolume(UiAudioSettings.WhiteNoiseVolume);
             _ = _fallbackWhiteNoisePlayer.Play(_whiteNoiseSpacePath);
         }
     }
