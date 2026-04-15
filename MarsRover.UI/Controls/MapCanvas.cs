@@ -150,6 +150,11 @@ public class MapCanvas : Control
     private static readonly IBrush NightOverlay = new SolidColorBrush(Color.FromArgb(90, 0, 5, 20));
     private static readonly IBrush GridBrush = new SolidColorBrush(Color.FromArgb(52, 255, 240, 224));
     private static readonly Pen GridPen = new Pen(GridBrush, 0.6);
+    private static readonly Color BaseFillDay = Color.FromArgb(130, 26, 130, 200);
+    private static readonly Color BaseFillNight = Color.FromArgb(175, 46, 165, 235);
+    private static readonly Color BaseRing = Color.FromArgb(235, 157, 237, 255);
+    private static readonly Color BaseCore = Color.FromArgb(245, 236, 249, 255);
+    private static readonly Color BaseCross = Color.FromArgb(220, 82, 210, 255);
 
     // Ghost trail palette (cool contrast)
     private static readonly Color TrailMove = Color.FromArgb(190, 0x3E, 0xD8, 0xFF);
@@ -233,6 +238,8 @@ public class MapCanvas : Control
         if (IsNight && !IsGhostMode)
             ctx.FillRectangle(NightOverlay, new Rect(0, 0, Bounds.Width, Bounds.Height));
 
+        DrawBaseMarker(ctx, map, viewport, cellW, cellH);
+
         if (IsGhostMode)
             DrawGhostOverlay(ctx, viewport, cellW, cellH);
         else
@@ -295,6 +302,38 @@ public class MapCanvas : Control
             double sx = (x - viewport.Left) * cellW;
             ctx.DrawLine(GridPen, new Point(sx, 0), new Point(sx, Bounds.Height));
         }
+    }
+
+    private void DrawBaseMarker(DrawingContext ctx, GameMap map, CameraViewport viewport, double cellW, double cellH)
+    {
+        // Reveal base marker with the same line-scan progression as map tiles.
+        double reveal = Math.Clamp(TileRevealProgress, 0.0, 1.0);
+        bool baseTileVisible = reveal >= 1.0 || IsTileVisibleByReveal(map.StartX, map.StartY);
+        if (!baseTileVisible)
+            return;
+
+        var baseRect = TileToScreenRect(map.StartX, map.StartY, viewport, cellW, cellH);
+        if (!RectIntersectsBounds(baseRect))
+            return;
+
+        double inset = Math.Max(1.0, Math.Min(cellW, cellH) * 0.1);
+        var markerRect = baseRect.Deflate(inset);
+        var fillColor = IsNight ? BaseFillNight : BaseFillDay;
+        ctx.FillRectangle(new SolidColorBrush(fillColor), markerRect);
+
+        double cx = markerRect.Center.X;
+        double cy = markerRect.Center.Y;
+        double r = Math.Max(2.0, Math.Min(cellW, cellH) * 0.23);
+        var ringPen = new Pen(new SolidColorBrush(BaseRing), 1.6);
+        var coreBrush = new SolidColorBrush(BaseCore);
+        var crossPen = new Pen(new SolidColorBrush(BaseCross), 1.1);
+
+        ctx.DrawEllipse(null, ringPen, new Point(cx, cy), r, r);
+        ctx.DrawEllipse(coreBrush, null, new Point(cx, cy), r * 0.4, r * 0.4);
+
+        double cross = r * 0.68;
+        ctx.DrawLine(crossPen, new Point(cx - cross, cy), new Point(cx + cross, cy));
+        ctx.DrawLine(crossPen, new Point(cx, cy - cross), new Point(cx, cy + cross));
     }
 
     private void DrawGhostOverlay(DrawingContext ctx, CameraViewport viewport, double cellW, double cellH)

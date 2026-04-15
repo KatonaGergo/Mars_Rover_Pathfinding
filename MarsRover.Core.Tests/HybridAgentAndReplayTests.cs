@@ -27,6 +27,72 @@ public class HybridAgentAndReplayTests
         Assert.Equal(expected, actual);
     }
 
+    [Fact]
+    public void MustReturnNow_NightBridgeToDaylight_AllowsOneMoreCollectionWindow()
+    {
+        var map = CreateMap(
+            startX: 10,
+            startY: 10,
+            minerals:
+            [
+                (14, 10, 'B') // immediate mine is feasible after day bridge
+            ]);
+
+        // tick=47 is the final night tick in a sol; daylight arrives in 1 tick.
+        var agent = new HybridAgent(map, totalTicks: 51, existingTable: null, seed: 1);
+        var state = BuildState(14, 10, battery: 8.0, tick: 47);
+
+        var method = typeof(HybridAgent).GetMethod(
+            "MustReturnNow",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        bool actual = (bool)method!.Invoke(agent, [state, map])!;
+        Assert.False(actual);
+    }
+
+    [Fact]
+    public void ShouldWaitForDaylightOpportunity_UsesDaytimeFeasibility()
+    {
+        var map = CreateMap(
+            startX: 10,
+            startY: 10,
+            minerals:
+            [
+                (13, 10, 'B')
+            ]);
+
+        var agent = new HybridAgent(map, totalTicks: 54, existingTable: null, seed: 1);
+        var state = BuildState(12, 10, battery: 4.0, tick: 47); // last night tick
+
+        var method = typeof(HybridAgent).GetMethod(
+            "ShouldWaitForDaylightOpportunity",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        bool wait = (bool)method!.Invoke(agent, [state, map, 2, 7])!;
+        Assert.True(wait);
+    }
+
+    [Fact]
+    public void ReturningPhase_NightLowBattery_StandbyUntilDaylight()
+    {
+        var map = CreateMap(
+            startX: 10,
+            startY: 10,
+            minerals:
+            [
+                (13, 10, 'B')
+            ]);
+
+        var agent = new HybridAgent(map, totalTicks: 54, existingTable: null, seed: 1);
+        var state = BuildState(12, 10, battery: 4.0, tick: 47); // no safe move this tick
+        ForceReturningPhase(agent);
+
+        var action = agent.SelectAction(state, map, isTraining: false);
+        Assert.Equal(RoverActionType.Standby, action.Type);
+    }
+
     [Theory]
     [InlineData(10, 18, 10, 70.0)] // day-start return leg
     [InlineData(40, 18, 10, 70.0)] // night-start return leg
@@ -151,6 +217,35 @@ public class HybridAgentAndReplayTests
     }
 
     [Fact]
+    public void NightWatcherScore_PrefersClusteredFarZone_WhenLocalAreaIsSparse()
+    {
+        var map = CreateMap(
+            startX: 10,
+            startY: 10,
+            minerals:
+            [
+                (12, 10, 'B'), // near, isolated
+                (24, 24, 'Y'), // far cluster
+                (24, 25, 'G'),
+                (25, 24, 'B'),
+                (25, 25, 'Y')
+            ]);
+
+        var agent = new HybridAgent(map, totalTicks: 200, existingTable: null, seed: 1);
+        var state = BuildState(10, 10, battery: 100, tick: 40); // night
+
+        var method = typeof(HybridAgent).GetMethod(
+            "NightWatcherScore",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        double near = (double)method!.Invoke(agent, [state, map, 12, 10, 2, 10])!;
+        double far = (double)method.Invoke(agent, [state, map, 24, 24, 14, 10])!;
+
+        Assert.True(far > near);
+    }
+
+    [Fact]
     public void ShouldLeaveBase_DoesNotRelaunch_OnZeroSlackMargin()
     {
         var map = CreateMap(startX: 10, startY: 10, minerals: [(11, 10, 'B')]);
@@ -264,23 +359,10 @@ public class HybridAgentAndReplayTests
         double dynFinal = (double)dyn.GetType().GetProperty("FinalBattery")!.GetValue(dyn)!;
         double dynMin = (double)dyn.GetType().GetProperty("MinBattery")!.GetValue(dyn)!;
 
-        bool usesDynamicLegPlanner = typeof(HybridAgent).GetMethod(
-            "TickSpeedCandidates",
-            BindingFlags.Instance | BindingFlags.NonPublic) is null;
-
-        if (usesDynamicLegPlanner)
-        {
-            Assert.Equal(dynFeasible, legFeasible);
-            Assert.Equal(dynTicks, legTicks);
-            Assert.Equal(dynFinal, legFinal, 8);
-            Assert.Equal(dynMin, legMin, 8);
-        }
-        else
-        {
-            // Legacy policy is fixed-speed planned; this parity check targets the
-            // newer dynamic planner only.
-            return;
-        }
+        Assert.Equal(dynFeasible, legFeasible);
+        Assert.Equal(dynTicks, legTicks);
+        Assert.Equal(dynFinal, legFinal, 8);
+        Assert.Equal(dynMin, legMin, 8);
     }
 
     [Fact]
@@ -353,6 +435,57 @@ public class HybridAgentAndReplayTests
 
         Assert.True(SimulationRunner.ShouldUseDiversityReplay(on));
         Assert.False(SimulationRunner.ShouldUseDiversityReplay(off));
+    }
+
+    [Fact]
+    public void CheckpointSelection_PrefersHigherReward_WhenMineralsTie()
+    {
+        bool better = InvokeCheckpointSelector(
+            candidateMinerals: 5,
+            candidateReturnedHome: true,
+            candidateReward: 120,
+            candidateEndBattery: 40,
+            hasCurrentBest: true,
+            currentBestMinerals: 5,
+            currentBestReturnedHome: true,
+            currentBestReward: 95,
+            currentBestEndBattery: 70);
+
+        Assert.True(better);
+    }
+
+    [Fact]
+    public void CheckpointSelection_PrefersReturnedHome_WhenMineralsTie()
+    {
+        bool better = InvokeCheckpointSelector(
+            candidateMinerals: 6,
+            candidateReturnedHome: true,
+            candidateReward: 80,
+            candidateEndBattery: 20,
+            hasCurrentBest: true,
+            currentBestMinerals: 6,
+            currentBestReturnedHome: false,
+            currentBestReward: 130,
+            currentBestEndBattery: 90);
+
+        Assert.True(better);
+    }
+
+    [Fact]
+    public void CheckpointSelection_AcceptsFirstEpisode_WhenNoBestYet()
+    {
+        bool better = InvokeCheckpointSelector(
+            candidateMinerals: 0,
+            candidateReturnedHome: false,
+            candidateReward: -20,
+            candidateEndBattery: 5,
+            hasCurrentBest: false,
+            currentBestMinerals: 0,
+            currentBestReturnedHome: false,
+            currentBestReward: 0,
+            currentBestEndBattery: 0);
+
+        Assert.True(better);
     }
 
     [Fact]
@@ -457,6 +590,38 @@ public class HybridAgentAndReplayTests
         string sol = parts[1];
         string margin = parts.Length > 5 ? parts[5] : "0";
         return $"{sol}:{battery}:{margin}";
+    }
+
+    private static bool InvokeCheckpointSelector(
+        int candidateMinerals,
+        bool candidateReturnedHome,
+        double candidateReward,
+        double candidateEndBattery,
+        bool hasCurrentBest,
+        int currentBestMinerals,
+        bool currentBestReturnedHome,
+        double currentBestReward,
+        double currentBestEndBattery)
+    {
+        var method = typeof(SimulationRunner).GetMethod(
+            "IsBetterCheckpointCandidate",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        object? result = method!.Invoke(null,
+        [
+            candidateMinerals,
+            candidateReturnedHome,
+            candidateReward,
+            candidateEndBattery,
+            hasCurrentBest,
+            currentBestMinerals,
+            currentBestReturnedHome,
+            currentBestReward,
+            currentBestEndBattery
+        ]);
+
+        return Assert.IsType<bool>(result);
     }
 
     private static RoverState BuildState(int x, int y, double battery, int tick)

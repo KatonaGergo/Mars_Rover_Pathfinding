@@ -127,13 +127,9 @@
                         <Button Content="MAP" Classes="secondary"
                             Command="{Binding ShowMapCommand}"
                             VerticalAlignment="Center"/>
-                        <Button Content="FULL EXCAVATION" Classes="primary"
-                            Command="{Binding RunFullExcavationCommand}"
-                            IsEnabled="{Binding CanRunFullExcavation}"
-                            Classes.grayed="{Binding !CanRunFullExcavation}"
-                            VerticalAlignment="Center"/>
                         <Button Content="⏵ PLAY" Classes="primary" Command="{Binding PlayCommand}"
-                            Classes.grayed="{Binding !HasReplayData}"
+                            IsEnabled="{Binding CanPlayPrimary}"
+                            Classes.grayed="{Binding !CanPlayPrimary}"
                             VerticalAlignment="Center"/>
                         <Button Content="⏮ STEP" Classes="secondary" Command="{Binding StepBackwardCommand}"
                             Classes.grayed="{Binding !HasReplayData}"
@@ -664,32 +660,6 @@
                         <Button Grid.Column="4" Content="STEP-BY-STEP"
                                 Classes="secondary" HorizontalAlignment="Stretch"
                                 Command="{Binding StartStepByStepReplayCommand}"/>
-                    </Grid>
-                </StackPanel>
-            </Border>
-        </Border>
-        <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Grid.ColumnSpan="2"
-                Background="#CC000000" IsVisible="{Binding ShowFullExcavationPrompt}"
-                ZIndex="110">
-            <Border Background="#120F12" CornerRadius="12" Padding="30,24"
-                    HorizontalAlignment="Center" VerticalAlignment="Center"
-                    MinWidth="420" MaxWidth="620">
-                <StackPanel Spacing="16">
-                    <TextBlock Text="FULL EXCAVATION COMPLETE"
-                               FontSize="20" FontWeight="Bold"
-                               Foreground="#EF7E2A" HorizontalAlignment="Center"
-                               LetterSpacing="2"/>
-                    <TextBlock Text="{Binding FullExcavationSummary}"
-                               TextWrapping="Wrap" FontSize="13"
-                               Foreground="#E6B386"
-                               HorizontalAlignment="Center" TextAlignment="Center"/>
-                    <Grid ColumnDefinitions="*,12,*" Margin="0,6,0,0">
-                        <Button Grid.Column="0" Content="YES, SAVE"
-                                Classes="primary" HorizontalAlignment="Stretch"
-                                Command="{Binding ConfirmFullExcavationSaveCommand}"/>
-                        <Button Grid.Column="2" Content="NO"
-                                Classes="secondary" HorizontalAlignment="Stretch"
-                                Command="{Binding CancelFullExcavationSaveCommand}"/>
                     </Grid>
                 </StackPanel>
             </Border>

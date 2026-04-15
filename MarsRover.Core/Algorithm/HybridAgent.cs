@@ -16,6 +16,12 @@ public class HybridAgent
     private const double BatterySafetyMargin = 3.0;
     private const int    LookaheadTopK       = 6;
     private const double LookaheadWeight     = 0.35;
+    private const int    NightWatcherRadius  = 6;
+    private const int    NightLocalRadius    = 4;
+    private const double NightWatcherWeight  = 8.0;
+    private const double NightFarOnlyBoost   = 1.35;
+    private const int    DetourRetargetCooldownTicks = 2;
+    private const int    CollectionRetargetMinGainSteps = 2;
 
     // Fields
     private readonly QTable  _qTable;
@@ -31,6 +37,7 @@ public class HybridAgent
     public QTable      QTable          => _qTable;
     public MissionPhase CurrentPhase   => _phase;
     public int         LastDecisionIdx { get; private set; } = -1;
+    public int DaylightStandbyWatcherTriggers { get; private set; }
 
     private Queue<PathStep> _currentPath = new();
     private MissionPhase    _phase       = MissionPhase.Collection;
@@ -40,6 +47,8 @@ public class HybridAgent
     private int             _cachedFieldY = int.MinValue;
     private readonly Dictionary<string, int> _stateVisits = new();
     private double?         _prevDecisionBattery;
+    private int             _lastDetourRetargetTick = int.MinValue;
+    private (int x, int y)? _lastDetourTarget;
 
     public HybridAgent(GameMap map, int totalTicks, QTable? existingTable = null, int seed = 42)
     {
@@ -73,7 +82,18 @@ public class HybridAgent
         if (liveMap.HasMineral(state.X, state.Y))
         {
             _currentPath.Clear();
+            _lastDetourTarget = null;
             return (RoverAction.MineAction, -1);
+        }
+
+        if (ShouldStandbyForDaylightOpportunity(state, liveMap))
+        {
+            DaylightStandbyWatcherTriggers++;
+            _currentPath.Clear();
+            // Resume collection planning after sunrise instead of hard-locking return pathing.
+            if (_phase == MissionPhase.Returning)
+                _phase = MissionPhase.Collection;
+            return (RoverAction.StandbyAction, -1);
         }
 
         // Follow existing path
@@ -81,11 +101,23 @@ public class HybridAgent
         {
             if (_phase == MissionPhase.Returning)
             {
-                var detour = FindDetourMineral(state, liveMap);
-                if (detour.HasValue)
+                bool canRetarget = state.Tick - _lastDetourRetargetTick >= DetourRetargetCooldownTicks;
+                var detour = canRetarget ? FindDetourMineral(state, liveMap) : null;
+                if (detour.HasValue && detour != _lastDetourTarget)
                 {
                     _currentPath.Clear();
+                    _lastDetourRetargetTick = state.Tick;
+                    _lastDetourTarget = detour;
                     return (NavigateTo(detour.Value.x, detour.Value.y, state, liveMap), -1);
+                }
+            }
+            else
+            {
+                var retarget = FindCollectionRetarget(state, liveMap, isTraining);
+                if (retarget.HasValue)
+                {
+                    _currentPath.Clear();
+                    return (NavigateTo(retarget.Value.x, retarget.Value.y, state, liveMap), -1);
                 }
             }
             return (DequeueMove(state, liveMap), -1);
@@ -150,10 +182,88 @@ public class HybridAgent
         if (returnSteps == int.MaxValue) return true;
 
         var plan = SimulateReturnLegAggressive(state.Tick, returnSteps, state.Battery);
-        if (!plan.IsFeasible) return true;
+        if (!plan.IsFeasible)
+            return !ShouldWaitForDaylightOpportunity(state, liveMap, returnSteps, ticksRemaining);
 
         int marginTicks = ticksRemaining - (plan.Ticks + ReturnSafetyBuffer);
-        return marginTicks <= 0;
+        if (marginTicks > 0) return false;
+
+        return !ShouldWaitForDaylightOpportunity(state, liveMap, returnSteps, ticksRemaining);
+    }
+
+    private bool ShouldWaitForDaylightOpportunity(
+        RoverState state, GameMap liveMap, int returnSteps, int ticksRemaining)
+    {
+        if (SimulationEngine.IsDay(state.Tick)) return false;
+        if (liveMap.RemainingMinerals.Count == 0) return false;
+        bool hasCurrentOpportunity = HasFeasibleMineral(state, liveMap, RiskMode.Aggressive);
+
+        int ticksToDay = TicksUntilDaylight(state.Tick);
+        if (ticksToDay <= 0 || ticksToDay >= ticksRemaining) return false;
+
+        var bridge = SimulateStandbyBridge(state.Battery, state.Tick, ticksToDay);
+        if (!bridge.IsFeasible) return false;
+
+        int dayTick = state.Tick + ticksToDay;
+        var returnAfterBridge = SimulateReturnLegAggressive(dayTick, returnSteps, bridge.BatteryAtTargetTick);
+        if (!returnAfterBridge.IsFeasible) return false;
+
+        int marginAfterBridge = ticksRemaining - ticksToDay - (returnAfterBridge.Ticks + ReturnSafetyBuffer);
+        if (marginAfterBridge < 0) return false;
+
+        var daylightState = state with
+        {
+            Tick = dayTick,
+            Battery = bridge.BatteryAtTargetTick,
+            IsMining = false,
+            LastAction = RoverAction.StandbyAction
+        };
+
+        // Day watcher + battery/time watcher coordination:
+        // if sunrise bridge is safe and any daytime mineral plan is feasible,
+        // keep waiting instead of forcing an immediate night return.
+        bool hasDaylightOpportunity =
+            HasFeasibleMineral(daylightState, liveMap, RiskMode.Aggressive)
+            || HasFeasibleMineral(daylightState, liveMap, RiskMode.Conservative);
+
+        return hasCurrentOpportunity || hasDaylightOpportunity;
+    }
+
+    private bool ShouldStandbyForDaylightOpportunity(RoverState state, GameMap liveMap)
+    {
+        if (SimulationEngine.IsDay(state.Tick)) return false;
+        if (liveMap.RemainingMinerals.Count == 0) return false;
+
+        int ticksRemaining = _totalTicks - state.Tick;
+        int returnSteps = DistanceToBaseSteps(state, liveMap);
+        if (returnSteps == int.MaxValue) return false;
+
+        if (!ShouldWaitForDaylightOpportunity(state, liveMap, returnSteps, ticksRemaining))
+            return false;
+
+        int stepsForMoveSafety = _phase == MissionPhase.Returning
+            ? Math.Max(1, returnSteps)
+            : Math.Max(1, _currentPath.Count);
+
+        // If no margin-safe movement exists this tick, pause for daylight recharge.
+        return !CanMoveSafelyThisTick(state.Tick, state.Battery, stepsForMoveSafety);
+    }
+
+    private bool CanMoveSafelyThisTick(int tick, double battery, int stepsRemaining)
+    {
+        bool isDay = SimulationEngine.IsDay(tick);
+        foreach (var speed in TickSpeedCandidates(tick, Math.Max(1, stepsRemaining)))
+        {
+            double nextBattery = EnergyCalculator.Apply(
+                battery,
+                RoverActionType.Move,
+                speed,
+                isDay);
+            if (nextBattery >= BatterySafetyMargin)
+                return true;
+        }
+
+        return false;
     }
 
     private RoverAction NavigateHome(RoverState state, GameMap liveMap)
@@ -227,6 +337,38 @@ public class HybridAgent
         return best;
     }
 
+    private (int x, int y)? FindCollectionRetarget(
+        RoverState state, GameMap liveMap, bool isTraining)
+    {
+        if (isTraining || _phase != MissionPhase.Collection || _currentPath.Count == 0)
+            return null;
+        if (liveMap.RemainingMinerals.Count == 0)
+            return null;
+
+        bool canBridgeToDaylight = SimulationEngine.IsDay(state.Tick)
+                                    || SimulateStandbyBridge(
+                                        state.Battery,
+                                        state.Tick,
+                                        TicksUntilDaylight(state.Tick)).IsFeasible;
+
+        var target = (!SimulationEngine.IsDay(state.Tick)
+                      && canBridgeToDaylight
+                      && HasFeasibleMineral(state, liveMap, RiskMode.Aggressive))
+            ? PickBestMineral(state, liveMap, RiskMode.Aggressive)
+            : PickBestMineral(state, liveMap, RiskMode.Conservative)
+              ?? PickBestMineral(state, liveMap, RiskMode.Aggressive);
+
+        if (!target.HasValue) return null;
+
+        var roverField = GetDistanceField(state.X, state.Y, liveMap);
+        int retargetSteps = FieldDistance(roverField, target.Value.x, target.Value.y);
+        if (retargetSteps == int.MaxValue) return null;
+
+        return retargetSteps + CollectionRetargetMinGainSteps < _currentPath.Count
+            ? target
+            : null;
+    }
+
     // Strategic decision
 
     private HybridDecision MakeStrategicDecision(RoverState state, GameMap liveMap, bool isTraining)
@@ -236,7 +378,7 @@ public class HybridAgent
         double eps = isTraining ? EffectiveEpsilonForState(key) : 0.0;
         if (isTraining && _random.NextDouble() < eps)
             return ExploreRandomDecision(liveMap);
-        return ExploitBestDecision(qState, liveMap);
+        return ExploitBestDecision(qState, state, liveMap);
     }
 
     private double EffectiveEpsilonForState(string stateKey)
@@ -277,7 +419,8 @@ public class HybridAgent
         return best - second;
     }
 
-    private HybridDecision ExploitBestDecision(HybridQLearningState qState, GameMap liveMap)
+    private HybridDecision ExploitBestDecision(
+        HybridQLearningState qState, RoverState state, GameMap liveMap)
     {
         int idx      = _qTable.BestActionIndex(qState.ToKey(), (int)HybridDecision.Count);
         var decision = IndexToDecision(idx);
@@ -288,8 +431,23 @@ public class HybridAgent
         // override that with a premature ReturnToBase while minerals still exist.
         if (liveMap.RemainingMinerals.Count > 0)
         {
-            if (decision == HybridDecision.ReturnToBase) return HybridDecision.SeekBestConservative;
-            if (decision == HybridDecision.Standby)      return HybridDecision.SeekBestConservative;
+            if (decision == HybridDecision.ReturnToBase || decision == HybridDecision.Standby)
+            {
+                bool canBridgeToDaylight = SimulationEngine.IsDay(state.Tick)
+                                            || SimulateStandbyBridge(
+                                                state.Battery,
+                                                state.Tick,
+                                                TicksUntilDaylight(state.Tick)).IsFeasible;
+
+                if (canBridgeToDaylight && HasFeasibleMineral(state, liveMap, RiskMode.Aggressive))
+                    return HybridDecision.SeekBestAggressive;
+
+                if (HasFeasibleMineral(state, liveMap, RiskMode.Conservative))
+                    return HybridDecision.SeekBestConservative;
+
+                if (HasFeasibleMineral(state, liveMap, RiskMode.Aggressive))
+                    return HybridDecision.SeekBestAggressive;
+            }
         }
 
         return decision;
@@ -515,6 +673,17 @@ public class HybridAgent
                              + marginTicks * marginBonus
                              + marginBattery * 0.75
                              - stepsHome * detourPenalty;
+
+            if (!SimulationEngine.IsDay(state.Tick))
+            {
+                baseScore += NightWatcherScore(
+                    state,
+                    liveMap,
+                    pos.x,
+                    pos.y,
+                    stepsToMineral,
+                    marginTicks);
+            }
             candidates.Add(new MineralCandidatePlan(
                 X:               pos.x,
                 Y:               pos.y,
@@ -527,6 +696,108 @@ public class HybridAgent
         }
 
         return candidates;
+    }
+
+    private bool HasFeasibleMineral(RoverState state, GameMap liveMap, RiskMode mode)
+    {
+        if (liveMap.RemainingMinerals.Count == 0) return false;
+        var roverField = GetDistanceField(state.X, state.Y, liveMap);
+        var baseField = GetBaseDistanceField(liveMap);
+        return EvaluateFeasibleMinerals(state, liveMap, roverField, baseField, mode).Count > 0;
+    }
+
+    private double NightWatcherScore(
+        RoverState state,
+        GameMap liveMap,
+        int candidateX,
+        int candidateY,
+        int stepsToMineral,
+        int marginTicks)
+    {
+        if (SimulationEngine.IsDay(state.Tick)) return 0.0;
+
+        double localDensity = WeightedMineralDensity(state.X, state.Y, liveMap, NightWatcherRadius);
+        double candidateDensity = WeightedMineralDensity(candidateX, candidateY, liveMap, NightWatcherRadius);
+        int localCount = CountMineralsWithinRadius(state.X, state.Y, liveMap, NightLocalRadius);
+        double farFactor = Math.Clamp((stepsToMineral - NightLocalRadius) / 8.0, 0.0, 2.0);
+        double scarcityFactor = 1.0 + Math.Clamp(1.0 - localDensity, 0.0, 1.0);
+
+        bool canBridgeToDaylight = SimulateStandbyBridge(
+            state.Battery,
+            state.Tick,
+            TicksUntilDaylight(state.Tick)).IsFeasible;
+
+        double daylightFactor = canBridgeToDaylight ? 1.1 : 0.6;
+        double bonus = candidateDensity
+                       * scarcityFactor
+                       * (1.0 + farFactor * 0.5)
+                       * daylightFactor;
+
+        if (localCount == 0)
+            bonus *= NightFarOnlyBoost;
+
+        if (marginTicks <= 1 && !canBridgeToDaylight)
+            bonus *= 0.4;
+
+        return bonus * NightWatcherWeight;
+    }
+
+    private static int TicksUntilDaylight(int tick)
+    {
+        if (SimulationEngine.IsDay(tick)) return 0;
+        int tickInSol = tick % RoverState.TicksPerSol;
+        return RoverState.TicksPerSol - tickInSol;
+    }
+
+    private static int CountMineralsWithinRadius(
+        int centerX, int centerY, GameMap liveMap, int radius)
+    {
+        int count = 0;
+        foreach (var pos in liveMap.RemainingMinerals)
+        {
+            int dx = Math.Abs(pos.x - centerX);
+            int dy = Math.Abs(pos.y - centerY);
+            int chebyshev = Math.Max(dx, dy);
+            if (chebyshev <= radius) count++;
+        }
+        return count;
+    }
+
+    private static double WeightedMineralDensity(
+        int centerX, int centerY, GameMap liveMap, int radius)
+    {
+        if (radius <= 0 || liveMap.RemainingMinerals.Count == 0) return 0.0;
+
+        double weighted = 0.0;
+        foreach (var pos in liveMap.RemainingMinerals)
+        {
+            int dx = Math.Abs(pos.x - centerX);
+            int dy = Math.Abs(pos.y - centerY);
+            int chebyshev = Math.Max(dx, dy);
+            if (chebyshev > radius) continue;
+            weighted += 1.0 / (1.0 + chebyshev);
+        }
+
+        double normalizer = Math.Max(1.0, radius * 2.0);
+        return Math.Clamp(weighted / normalizer, 0.0, 3.0);
+    }
+
+    private static NightBridgePlan SimulateStandbyBridge(
+        double startBattery, int startTick, int ticks)
+    {
+        if (ticks <= 0)
+            return new NightBridgePlan(true, Math.Clamp(startBattery, 0.0, EnergyCalculator.MaxBattery));
+
+        double battery = Math.Clamp(startBattery, 0.0, EnergyCalculator.MaxBattery);
+        for (int i = 0; i < ticks; i++)
+        {
+            bool isDay = SimulationEngine.IsDay(startTick + i);
+            battery = EnergyCalculator.Apply(battery, RoverActionType.Standby, RoverSpeed.Slow, isDay);
+            if (battery < BatterySafetyMargin)
+                return new NightBridgePlan(false, battery);
+        }
+
+        return new NightBridgePlan(true, battery);
     }
 
     private double BestSecondLegScore(
@@ -650,17 +921,15 @@ public class HybridAgent
         if (pathSteps <= 0)
             return new LegPlan(true, 0, RoverSpeed.Slow, batteryAtStart, batteryAtStart);
 
-        RoverSpeed chosenSpeed = SimulationEngine.IsDay(startTick)
-            ? BestAffordableSpeedForLeg(startTick, pathSteps, batteryAtStart)
-            : NightSpeedPolicy(pathSteps);
+        var dynamicPlan = SimulateDynamicLeg(startTick, pathSteps, batteryAtStart);
+        var speedLabel = TickSpeedCandidates(startTick, pathSteps).First();
 
-        var sim = EnergyCalculator.SimulateTrip(
-            startTick, pathSteps, chosenSpeed, _totalTicks, batteryAtStart);
-
-        bool feasible = sim.MinBattery >= BatterySafetyMargin
-                        && sim.FinalBattery >= BatterySafetyMargin;
-
-        return new LegPlan(feasible, sim.Ticks, chosenSpeed, sim.FinalBattery, sim.MinBattery);
+        return new LegPlan(
+            dynamicPlan.IsFeasible,
+            dynamicPlan.Ticks,
+            speedLabel,
+            dynamicPlan.FinalBattery,
+            dynamicPlan.MinBattery);
     }
 
     private DynamicLegPlan SimulateDynamicLeg(int startTick, int pathSteps, double batteryAtStart)
@@ -821,6 +1090,9 @@ public class HybridAgent
         _cachedFieldY = int.MinValue;
         _stateVisits.Clear();
         _prevDecisionBattery = null;
+        _lastDetourRetargetTick = int.MinValue;
+        _lastDetourTarget = null;
+        DaylightStandbyWatcherTriggers = 0;
     }
 
     private int DistanceToBaseSteps(RoverState state, GameMap liveMap)
@@ -970,6 +1242,10 @@ public class HybridAgent
         int    Ticks,
         double FinalBattery,
         double MinBattery);
+
+    private readonly record struct NightBridgePlan(
+        bool   IsFeasible,
+        double BatteryAtTargetTick);
 
     private readonly record struct MineralCandidatePlan(
         int    X,

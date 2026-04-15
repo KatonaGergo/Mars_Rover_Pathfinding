@@ -45,6 +45,9 @@ public class SimulationRunner
     private string QTablePath => _modelPath + ".qtable.json";
     private string MetaPath   => _modelPath + ".meta.json";
     public bool HasSavedModel => File.Exists(QTablePath);
+    public IReadOnlyList<SimulationLogEntry> LastBestTrainingEpisodeLog { get; private set; } = Array.Empty<SimulationLogEntry>();
+    public int LastBestTrainingEpisodeDaylightStandbyTriggerCount { get; private set; }
+    public int LastDeploymentDaylightStandbyTriggerCount { get; private set; }
 
     /// <summary>
     /// Normalises any model base-name or path to the canonical
@@ -172,11 +175,15 @@ public class SimulationRunner
         double bestScore = double.MinValue;
         TrainingResult? bestResult = null;
         bool hasStrictCandidate = false;
+        List<SimulationLogEntry>? bestEpisodeLog = null;
+        int bestEpisodeStandbyTriggers = 0;
 
         QTable? fallbackBest = null;
         double fallbackScore = double.MinValue;
         double fallbackReturnRate = double.MinValue;
         TrainingResult? fallbackResult = null;
+        List<SimulationLogEntry>? fallbackEpisodeLog = null;
+        int fallbackEpisodeStandbyTriggers = 0;
 
         for (int seed = 0; seed < seedCount; seed++)
         {
@@ -189,6 +196,8 @@ public class SimulationRunner
 
             var run = TrainCore(episodes, null, seedOptions, persistModel: false);
             var eval = EvaluatePolicy(run.bestTable, seedSweep);
+            var runEpisodeLog = CloneLog(LastBestTrainingEpisodeLog);
+            int runEpisodeStandbyTriggers = LastBestTrainingEpisodeDaylightStandbyTriggerCount;
             double score = eval.meanMinerals - 0.5 * eval.stdMinerals;
             bool meetsReturnConstraint = eval.returnRate >= 1.0;
 
@@ -205,6 +214,8 @@ public class SimulationRunner
                     bestScore = score;
                     best = run.bestTable;
                     bestResult = run.result;
+                    bestEpisodeLog = runEpisodeLog;
+                    bestEpisodeStandbyTriggers = runEpisodeStandbyTriggers;
                 }
             }
             else if (eval.returnRate > fallbackReturnRate
@@ -215,6 +226,8 @@ public class SimulationRunner
                 fallbackScore = score;
                 fallbackBest = run.bestTable;
                 fallbackResult = run.result;
+                fallbackEpisodeLog = runEpisodeLog;
+                fallbackEpisodeStandbyTriggers = runEpisodeStandbyTriggers;
             }
         }
 
@@ -227,6 +240,8 @@ public class SimulationRunner
                     "Falling back to best available candidate.");
                 best = fallbackBest;
                 bestResult = fallbackResult;
+                bestEpisodeLog = fallbackEpisodeLog;
+                bestEpisodeStandbyTriggers = fallbackEpisodeStandbyTriggers;
             }
             else
             {
@@ -235,6 +250,7 @@ public class SimulationRunner
         }
 
         SaveModel(best, episodes, bestResult.BestMinerals, options.ProfileName);
+        SetLastBestTrainingEpisode(bestEpisodeLog ?? new List<SimulationLogEntry>(), bestEpisodeStandbyTriggers);
         return (bestResult, best);
     }
 
@@ -336,6 +352,12 @@ public class SimulationRunner
         var    buffer       = new PrioritizedReplayBuffer(BufferCapacity);
         var    allRewards   = new List<double>();
         int    bestMinerals = 0;
+        bool   bestReturnedHome = false;
+        double bestReward = double.NegativeInfinity;
+        double bestEndBattery = double.NegativeInfinity;
+        bool   hasBestCheckpoint = false;
+        List<SimulationLogEntry> bestEpisodeLog = new();
+        int bestEpisodeDaylightStandbyTriggers = 0;
         QTable bestTable    = new QTable();   // snapshot of Q-table at peak performance
         int    episodeBatch = ParallelThreads; // collect this many episodes per iteration
         bool   emitProgress = onProgress is not null;
@@ -366,7 +388,8 @@ public class SimulationRunner
                         options.MissionEndMode,
                         options.UseAdaptiveEpsilon,
                         options.AdaptiveEpsilonMax,
-                        captureSnapshots);
+                        captureSnapshots,
+                        captureEpisodeLog: true);
                 });
 
             // Merge each finished episode on the main thread.
@@ -382,12 +405,28 @@ public class SimulationRunner
                     ApplyEligibilityTraces(ep.Transitions, sharedTable,
                                            options.Lambda, options.TraceThreshold);
 
-                if (ep.MineralsCollected > bestMinerals)
+                if (IsBetterCheckpointCandidate(
+                        candidateMinerals: ep.MineralsCollected,
+                        candidateReturnedHome: ep.ReturnedHome,
+                        candidateReward: ep.TotalReward,
+                        candidateEndBattery: ep.EndBattery,
+                        hasCurrentBest: hasBestCheckpoint,
+                        currentBestMinerals: bestMinerals,
+                        currentBestReturnedHome: bestReturnedHome,
+                        currentBestReward: bestReward,
+                        currentBestEndBattery: bestEndBattery))
                 {
+                    hasBestCheckpoint = true;
                     bestMinerals = ep.MineralsCollected;
+                    bestReturnedHome = ep.ReturnedHome;
+                    bestReward = ep.TotalReward;
+                    bestEndBattery = ep.EndBattery;
+                    bestEpisodeLog = CloneLog(ep.EpisodeLog);
+                    bestEpisodeDaylightStandbyTriggers = ep.DaylightStandbyTriggers;
                     // Clone AFTER traces applied — bestTable now contains the
-                    // learning FROM the winning episode, not just the policy
-                    // that generated it. This is the table deployment should use.
+                    // learning FROM the selected episode, not just the policy
+                    // that generated it. Selection is minerals-first, then
+                    // return-home, reward, and ending battery as tie-breakers.
                     bestTable = QTable.CloneFrom(sharedTable);
                 }
 
@@ -457,7 +496,8 @@ public class SimulationRunner
 
         // Save the best checkpoint — the table that actually achieved bestMinerals
         // not the final table which may have been updated by worse later episodes
-        var tableToSave = bestTable.StateCount > 0 ? bestTable : sharedTable;
+        var tableToSave = hasBestCheckpoint ? bestTable : sharedTable;
+        SetLastBestTrainingEpisode(bestEpisodeLog, bestEpisodeDaylightStandbyTriggers);
         if (persistModel)
             SaveModel(tableToSave, episodes, bestMinerals, options.ProfileName);
 
@@ -474,7 +514,8 @@ public class SimulationRunner
         MissionEndMode missionEndMode = MissionEndMode.ContinueUntilDeadline,
         bool useAdaptiveEpsilon = false,
         double adaptiveEpsilonMax = 1.0,
-        bool captureSteps = false)
+        bool captureSteps = false,
+        bool captureEpisodeLog = false)
     {
         var episodeMap = _map.Clone();
         var engine     = new SimulationEngine(episodeMap, _durationHours);
@@ -487,6 +528,7 @@ public class SimulationRunner
 
         var    transitions  = new List<StrategicTransition>();
         List<StepRecord>? steps = captureSteps ? new List<StepRecord>() : null;
+        List<SimulationLogEntry>? episodeLog = captureEpisodeLog ? new List<SimulationLogEntry>() : null;
         double totalReward  = 0;
 
         while (!engine.IsFinished && !engine.BatteryDead
@@ -503,6 +545,8 @@ public class SimulationRunner
             int prevTotal = state.TotalMinerals;
             var entry     = engine.Step(action, agent.CurrentPhase.ToString());
             if (entry == null) break;
+            if (episodeLog != null)
+                AppendExpandedLogEntries(episodeLog, entry, action, state.X, state.Y, episodeMap);
 
             var  newState     = engine.GetState();
             bool collected    = newState.TotalMinerals > prevTotal;
@@ -570,7 +614,9 @@ public class SimulationRunner
             MineralsCollected: final.TotalMinerals,
             BatteryDied:       engine.BatteryDead,
             ReturnedHome:      returnedOk,
-            EndBattery:        final.Battery);
+            EndBattery:        final.Battery,
+            EpisodeLog:        episodeLog ?? new List<SimulationLogEntry>(),
+            DaylightStandbyTriggers: agent.DaylightStandbyWatcherTriggers);
     }
 
     // Eligibility traces
@@ -662,6 +708,7 @@ public class SimulationRunner
         var agent = new HybridAgent(_map, _totalTicks, table, seed: 0);
         agent.Epsilon = 0.0;
         agent.ResetNavigation();
+        LastDeploymentDaylightStandbyTriggerCount = 0;
 
         var liveMap = _map.Clone();
         var engine  = new SimulationEngine(liveMap, _durationHours);
@@ -675,31 +722,10 @@ public class SimulationRunner
             var action = agent.SelectAction(state, liveMap, isTraining: false);
             var entry  = engine.Step(action, agent.CurrentPhase.ToString());
             if (entry == null) break;
-
-            // Expand multi-step moves into one log entry per cell so the
-            // map playback shows every individual cell the rover visited.
-            if (action.Type == RoverActionType.Move
-                && action.Directions is { Count: > 1 })
-            {
-                int rx = state.X, ry = state.Y;
-                for (int s = 0; s < action.Directions.Count; s++)
-                {
-                    var (nx, ny) = liveMap.ApplyDirection(rx, ry, action.Directions[s]);
-                    bool isLast  = s == action.Directions.Count - 1;
-                    // Intermediate cells share the tick's battery/mineral state.
-                    // Only the final cell gets the real entry data.
-                    log.Add(isLast ? entry with { X = nx, Y = ny }
-                                   : entry with { X = nx, Y = ny,
-                                                  EventNote = "" });
-                    rx = nx; ry = ny;
-                }
-            }
-            else
-            {
-                log.Add(entry);
-            }
+            AppendExpandedLogEntries(log, entry, action, state.X, state.Y, liveMap);
         }
 
+        LastDeploymentDaylightStandbyTriggerCount = agent.DaylightStandbyWatcherTriggers;
         return log;
     }
 
@@ -744,6 +770,79 @@ public class SimulationRunner
 
     public static bool ShouldUseDiversityReplay(TrainingOptions options)
         => (options.ReplayDiversity ?? new ReplayDiversityOptions()).Enabled;
+
+    private static void AppendExpandedLogEntries(
+        List<SimulationLogEntry> log,
+        SimulationLogEntry entry,
+        RoverAction action,
+        int startX,
+        int startY,
+        GameMap liveMap)
+    {
+        // Expand multi-step moves into one log entry per cell so playback
+        // reflects every visited cell in the same tick.
+        if (action.Type == RoverActionType.Move
+            && action.Directions is { Count: > 1 })
+        {
+            int rx = startX;
+            int ry = startY;
+            for (int s = 0; s < action.Directions.Count; s++)
+            {
+                var (nx, ny) = liveMap.ApplyDirection(rx, ry, action.Directions[s]);
+                bool isLast  = s == action.Directions.Count - 1;
+                log.Add(isLast ? entry with { X = nx, Y = ny }
+                               : entry with { X = nx, Y = ny, EventNote = string.Empty });
+                rx = nx;
+                ry = ny;
+            }
+            return;
+        }
+
+        log.Add(entry);
+    }
+
+    private void SetLastBestTrainingEpisode(
+        List<SimulationLogEntry> log,
+        int daylightStandbyTriggerCount)
+    {
+        LastBestTrainingEpisodeLog = CloneLog(log);
+        LastBestTrainingEpisodeDaylightStandbyTriggerCount = daylightStandbyTriggerCount;
+    }
+
+    private static List<SimulationLogEntry> CloneLog(IReadOnlyList<SimulationLogEntry> source)
+    {
+        var copy = new List<SimulationLogEntry>(source.Count);
+        foreach (var entry in source)
+            copy.Add(entry);
+        return copy;
+    }
+
+    private static bool IsBetterCheckpointCandidate(
+        int candidateMinerals,
+        bool candidateReturnedHome,
+        double candidateReward,
+        double candidateEndBattery,
+        bool hasCurrentBest,
+        int currentBestMinerals,
+        bool currentBestReturnedHome,
+        double currentBestReward,
+        double currentBestEndBattery)
+    {
+        if (!hasCurrentBest)
+            return true;
+
+        if (candidateMinerals != currentBestMinerals)
+            return candidateMinerals > currentBestMinerals;
+
+        if (candidateReturnedHome != currentBestReturnedHome)
+            return candidateReturnedHome && !currentBestReturnedHome;
+
+        const double RewardTieTolerance = 1e-9;
+        if (Math.Abs(candidateReward - currentBestReward) > RewardTieTolerance)
+            return candidateReward > currentBestReward;
+
+        return candidateEndBattery > currentBestEndBattery;
+    }
 
     // Persistence
 
@@ -913,7 +1012,9 @@ internal record EpisodeData(
     int                       MineralsCollected,
     bool                      BatteryDied,
     bool                      ReturnedHome,
-    double                    EndBattery);
+    double                    EndBattery,
+    List<SimulationLogEntry>  EpisodeLog,
+    int                       DaylightStandbyTriggers);
 
 internal class ModelMeta
 {

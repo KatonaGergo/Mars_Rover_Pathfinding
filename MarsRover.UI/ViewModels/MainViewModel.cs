@@ -67,7 +67,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private GameMap? _gameMap;
     public bool HasMapLoaded => GameMap != null;
     public bool HasReplayData => HasLog || (GhostTrail?.Count > 0);
-    public bool CanRunFullExcavation => HasMapLoaded && !IsTraining && !IsFullExcavationRunning;
+    public bool CanPlayPrimary => ShowGhostReplay
+        ? (GhostTrail?.Count > 0)
+        : ((HasMapLoaded && !IsTraining) || HasLog);
     public string PauseButtonContent => IsPaused ? "▶" : "⏸";
         [ObservableProperty] private bool _showMineralsFoundPrompt = false;
     [ObservableProperty] private int _mineralsFoundCountdown = 0;
@@ -88,13 +90,13 @@ public partial class MainViewModel : ObservableObject
     private string _mapPath   = "";           // stored on map load — used for run log
     [ObservableProperty] private bool _hasSavedModel = false;
     [ObservableProperty] private bool _hasTrainingCompletedInSession = false;
-    [ObservableProperty] private bool _isFullExcavationRunning = false;
-    [ObservableProperty] private bool _showFullExcavationPrompt = false;
-    [ObservableProperty] private string _fullExcavationSummary = string.Empty;
-    private List<SimulationLogEntry>? _pendingFullExcavationLog;
-    private bool _deferFullExcavationPromptUntilPlaybackEnds;
+    [ObservableProperty] private int _daylightStandbyWatcherCount = 0;
+    private List<SimulationLogEntry> _bestTrainingEpisodeLog = new();
+    private int _bestTrainingEpisodeDaylightStandbyTriggers;
     private bool _modelLoadedManually;
     private bool _allowResumeThisSession;
+    public string DaylightWatcherStatus
+        => $"DAYLIGHT STANDBY WATCHER: {DaylightStandbyWatcherCount} trigger(s)";
 
     /// <summary>Set by MainWindow to open the native file picker.</summary>
     public Func<Task<string?>>? PickMapFileAsync { get; set; }
@@ -136,7 +138,11 @@ public partial class MainViewModel : ObservableObject
     public bool ShowMapView => !ShowTrainingChart && !ShowGhostReplay;
 
     partial void OnShowTrainingChartChanged(bool value) => OnPropertyChanged(nameof(ShowMapView));
-    partial void OnShowGhostReplayChanged(bool value) => OnPropertyChanged(nameof(ShowMapView));
+    partial void OnShowGhostReplayChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowMapView));
+        OnPropertyChanged(nameof(CanPlayPrimary));
+    }
     partial void OnShowMineralsFoundPromptChanged(bool value) => OnPropertyChanged(nameof(IsMineralsFoundPromptVisible));
     partial void OnMineralsFoundCountdownChanged(int value) => OnPropertyChanged(nameof(MineralsFoundCountdownText));
     partial void OnGameMapChanged(GameMap? value)
@@ -157,14 +163,23 @@ public partial class MainViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasMapLoaded));
-        OnPropertyChanged(nameof(CanRunFullExcavation));
+        OnPropertyChanged(nameof(CanPlayPrimary));
     }
-    partial void OnHasLogChanged(bool value)            => OnPropertyChanged(nameof(HasReplayData));
+    partial void OnHasLogChanged(bool value)
+    {
+        OnPropertyChanged(nameof(HasReplayData));
+        OnPropertyChanged(nameof(CanPlayPrimary));
+    }
     partial void OnGhostTrailChanged(List<MarsRover.Core.Algorithm.StepRecord>? value)
-        => OnPropertyChanged(nameof(HasReplayData));
-    partial void OnIsTrainingChanged(bool value) => OnPropertyChanged(nameof(CanRunFullExcavation));
-    partial void OnHasTrainingCompletedInSessionChanged(bool value) => OnPropertyChanged(nameof(CanRunFullExcavation));
-    partial void OnIsFullExcavationRunningChanged(bool value) => OnPropertyChanged(nameof(CanRunFullExcavation));
+    {
+        OnPropertyChanged(nameof(HasReplayData));
+        OnPropertyChanged(nameof(CanPlayPrimary));
+    }
+    partial void OnDaylightStandbyWatcherCountChanged(int value) => OnPropertyChanged(nameof(DaylightWatcherStatus));
+    partial void OnIsTrainingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanPlayPrimary));
+    }
     partial void OnIsPausedChanged(bool value) => OnPropertyChanged(nameof(PauseButtonContent));
     partial void OnIsRunningChanged(bool value) => OnPropertyChanged(nameof(PauseButtonContent));
     partial void OnMapZoomChanged(double value)
@@ -470,8 +485,7 @@ public partial class MainViewModel : ObservableObject
         TrainingProgress = 0;
         _pendingCompletionStatus = null;
         _pendingResetDisplayToStart = false;
-        ShowFullExcavationPrompt = false;
-        _pendingFullExcavationLog = null;
+        ClearBestTrainingEpisodeReplay();
 
         // Clear previous training data
         _epMineralPoints.Clear();
@@ -548,6 +562,10 @@ public partial class MainViewModel : ObservableObject
                     _log              = log;
                     _playbackIndex    = 0;
                     HasLog            = log.Count > 0;
+                    SetBestTrainingEpisodeReplay(
+                        runner.LastBestTrainingEpisodeLog,
+                        runner.LastBestTrainingEpisodeDaylightStandbyTriggerCount);
+                    DaylightStandbyWatcherCount = runner.LastDeploymentDaylightStandbyTriggerCount;
                     if (!keepGhostQueue)
                     {
                         IsTraining      = false;
@@ -565,8 +583,18 @@ public partial class MainViewModel : ObservableObject
                         logPath = MarsRover.Core.Utils.MissionLogger.Save(
                             log, _mapPath, durationHours, trainingEpisodes, _modelPath, GameMap);
 
+                    string deploymentSummary = string.Empty;
+                    if (log.Count > 0 && GameMap != null)
+                    {
+                        var final = log[^1];
+                        bool returnedHome = final.X == GameMap.StartX && final.Y == GameMap.StartY;
+                        deploymentSummary =
+                            $" | Deployment final: {final.TotalMinerals} minerals ({(returnedHome ? "returned home" : "not at base")})";
+                    }
+
                     string completionStatus = $"✅ Training complete — " +
-                                              $"{training.BestMinerals} peak minerals | " +
+                                              $"Training peak: {training.BestMinerals} minerals" +
+                                              deploymentSummary + " | " +
                                               $"Model saved to {SimulationRunner.ResolveModelPath(_modelPath)}.qtable.json" +
                                               (logPath != null ? $" | Log → {logPath}" : "");
 
@@ -587,6 +615,8 @@ public partial class MainViewModel : ObservableObject
         {
             if (_isNavigatingAway || runGeneration != _runGeneration) return;
             IsTraining     = false;
+            ClearBestTrainingEpisodeReplay();
+            DaylightStandbyWatcherCount = 0;
             string msg = ex.Message;
             string inner = ex.InnerException?.Message ?? string.Empty;
             bool schemaMismatch = msg.Contains("schema mismatch", StringComparison.OrdinalIgnoreCase)
@@ -657,6 +687,8 @@ public partial class MainViewModel : ObservableObject
             _modelLoadedManually = false;
             _allowResumeThisSession = false;
             HasTrainingCompletedInSession = false;
+            ClearBestTrainingEpisodeReplay();
+            DaylightStandbyWatcherCount = 0;
             if (!result.HadModel)
             {
                 TrainingStatus = "No saved model found to reset.";
@@ -675,33 +707,96 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Play()
+    private async Task Play()
     {
-        UpdateTimerInterval();
-
         if (ShowGhostReplay && GhostTrail != null && GhostTrail.Count > 0)
         {
-            if (GhostIndex >= GhostTrail.Count)
-            {
-                if (_pendingGhostSnapshots.Count > 0)
-                    StartNextGhostReplayFromQueue();
-            }
-
-            if (GhostTrail == null || GhostTrail.Count == 0 || GhostIndex >= GhostTrail.Count)
-                return;
-
-            _ghostTimer.Start();
-            IsGhostMode = true;
-            IsRunning = true;
-            IsPaused = false;
+            StartCurrentPlayback();
             return;
         }
 
-        if (!HasLog) return;
+        if (GameMap == null)
+        {
+            if (HasLog)
+            {
+                StartCurrentPlayback();
+                return;
+            }
 
-        _playbackTimer.Start();
-        IsRunning = true;
-        IsPaused  = false;
+            TrainingStatus = "No map loaded. Click 'LOAD MAP' first.";
+            return;
+        }
+
+        if (IsTraining)
+        {
+            TrainingStatus = "Training is running. Wait for it to finish before best-run playback.";
+            return;
+        }
+
+        int durationHours = EnsureValidDurationHours();
+        int runGeneration = ++_runGeneration;
+        _isNavigatingAway = false;
+
+        string modelFile = SimulationRunner.ResolveModelPath(_modelPath) + ".qtable.json";
+        bool hasModelOnDisk = File.Exists(modelFile);
+        TrainingStatus = hasModelOnDisk
+            ? "Evaluating best available run (deterministic + stored replays)..."
+            : "Evaluating best available run (no saved model on disk)...";
+
+        var candidates = new List<ReplayCandidate>(capacity: 3);
+        if (_log.Count > 0)
+        {
+            candidates.Add(new ReplayCandidate(
+                Source: "current replay",
+                Log: new List<SimulationLogEntry>(_log),
+                DaylightStandbyTriggers: DaylightStandbyWatcherCount));
+        }
+
+        if (_bestTrainingEpisodeLog.Count > 0)
+        {
+            candidates.Add(new ReplayCandidate(
+                Source: "best training episode",
+                Log: new List<SimulationLogEntry>(_bestTrainingEpisodeLog),
+                DaylightStandbyTriggers: _bestTrainingEpisodeDaylightStandbyTriggers));
+        }
+
+        try
+        {
+            var runner = new SimulationRunner(GameMap, durationHours, _modelPath);
+            var deterministicLog = await Task.Run(() => runner.RunSimulation());
+            if (_isNavigatingAway || runGeneration != _runGeneration) return;
+
+            HasSavedModel = File.Exists(modelFile);
+            if (deterministicLog.Count > 0)
+            {
+                candidates.Add(new ReplayCandidate(
+                    Source: "deterministic policy",
+                    Log: deterministicLog,
+                    DaylightStandbyTriggers: runner.LastDeploymentDaylightStandbyTriggerCount));
+            }
+
+            if (candidates.Count == 0)
+            {
+                TrainingStatus = "No replay data available to play.";
+                return;
+            }
+
+            var best = SelectBestReplayCandidate(candidates, GameMap.StartX, GameMap.StartY);
+            DaylightStandbyWatcherCount = best.DaylightStandbyTriggers;
+            LoadReplayLogForPlayback(best.Log, autoPlay: true);
+
+            var final = best.Log[^1];
+            bool returnedHome = final.X == GameMap.StartX && final.Y == GameMap.StartY;
+            TrainingStatus =
+                $"Playing best available run ({best.Source}) — {final.TotalMinerals} minerals " +
+                $"({(returnedHome ? "returned home" : "not at base")}) | " +
+                $"Daylight watcher triggers: {best.DaylightStandbyTriggers}";
+        }
+        catch (Exception ex)
+        {
+            if (_isNavigatingAway || runGeneration != _runGeneration) return;
+            TrainingStatus = $"Best-run playback failed: {ex.Message}";
+        }
     }
 
     [RelayCommand]
@@ -717,7 +812,7 @@ public partial class MainViewModel : ObservableObject
         }
 
         if (HasReplayData)
-            Play();
+            StartCurrentPlayback();
     }
 
     [RelayCommand]
@@ -805,157 +900,6 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task RunFullExcavation()
-    {
-        if (GameMap == null)
-        {
-            TrainingStatus = "Load a map before running full excavation.";
-            return;
-        }
-
-        if (IsFullExcavationRunning)
-            return;
-
-        IsFullExcavationRunning = true;
-        ShowFullExcavationPrompt = false;
-        _pendingFullExcavationLog = null;
-        _deferFullExcavationPromptUntilPlaybackEnds = false;
-
-        int targetMinerals = GameMap.RemainingMinerals.Count;
-        int startHours = EnsureValidDurationHours();
-        int currentHours = startHours;
-        const int maxAttempts = 12;
-        const int maxHours = 100_000;
-        string failureReason = "Full excavation target was not reached.";
-
-        try
-        {
-            string modelFile = SimulationRunner.ResolveModelPath(_modelPath) + ".qtable.json";
-            bool hasModelOnDisk = File.Exists(modelFile);
-            HasSavedModel = hasModelOnDisk;
-            if (!hasModelOnDisk)
-            {
-                // Full excavation can now run without manual training.
-                // If there is no saved policy, run a short warmup so the rover
-                // still starts from a competent model before the hour-window search.
-                int warmupEpisodes = Math.Clamp(Math.Max(300, targetMinerals * 20), 300, 2000);
-                TrainingStatus = $"No saved model found. Auto-training warmup ({warmupEpisodes} episodes) for full excavation...";
-                var warmupRunner = new SimulationRunner(GameMap.Clone(), startHours, _modelPath);
-                var warmupOptions = TrainingProfileFactory.CreateOptions(TrainingProfile.Balanced) with
-                {
-                    ResumeSavedModel = false,
-                    CaptureProgressSnapshots = false,
-                    ProfileName = "FullExcavationAutoWarmup"
-                };
-                int lastReportedEpisode = 0;
-                await Task.Run(() => warmupRunner.Train(
-                    episodes: warmupEpisodes,
-                    onProgress: p =>
-                    {
-                        if (p.Episode != warmupEpisodes
-                            && p.Episode - lastReportedEpisode < 25)
-                            return;
-                        lastReportedEpisode = p.Episode;
-                        Dispatcher.UIThread.Post(() =>
-                        {
-                            if (!IsFullExcavationRunning) return;
-                            TrainingStatus =
-                                $"Auto-training warmup... {p.Episode}/{warmupEpisodes} episodes | " +
-                                $"best={p.BestMinerals}";
-                        });
-                    },
-                    options: warmupOptions));
-                HasSavedModel = warmupRunner.HasSavedModel;
-                HasTrainingCompletedInSession = true;
-            }
-
-            TrainingStatus = $"Running full excavation search from {startHours}h mission window (best-effort fastest completion)...";
-
-            for (int attempt = 1; attempt <= maxAttempts && currentHours <= maxHours; attempt++)
-            {
-                int hoursForAttempt = currentHours;
-                var runner = new SimulationRunner(GameMap.Clone(), hoursForAttempt, _modelPath);
-                var log = await Task.Run(() =>
-                    runner.RunSimulation(missionEndMode: MissionEndMode.ContinueUntilDeadline));
-
-                if (log.Count == 0)
-                {
-                    failureReason = $"Attempt {attempt}: simulation produced no log data.";
-                    break;
-                }
-
-                // Surface movement early so Full Excavation visibly starts.
-                if (attempt == 1)
-                {
-                    LoadReplayLogForPlayback(log, autoPlay: true);
-                    TrainingStatus = $"Full excavation attempt {attempt} running ({hoursForAttempt}h window)...";
-                }
-
-                int completionIndex = log.FindIndex(e => e.TotalMinerals >= targetMinerals);
-                if (completionIndex >= 0)
-                {
-                    var completionEntry = log[completionIndex];
-                    _pendingFullExcavationLog = log.Take(completionIndex + 1).ToList();
-                    LoadReplayLogForPlayback(_pendingFullExcavationLog, autoPlay: true);
-                    FullExcavationSummary =
-                        $"Full excavation finished in {completionEntry.Tick / 2.0:F1} hours " +
-                        $"({completionEntry.Tick} ticks). Save this run to results/?";
-                    _deferFullExcavationPromptUntilPlaybackEnds = true;
-                    TrainingStatus = "Full excavation complete. Replaying winning run...";
-                    return;
-                }
-
-                var final = log[^1];
-                if (final.Battery <= 0)
-                {
-                    failureReason = $"Attempt {attempt}: rover battery depleted before full excavation.";
-                    break;
-                }
-
-                currentHours = Math.Min(maxHours + 1, hoursForAttempt * 2);
-            }
-
-            TrainingStatus = $"Full excavation not achieved. {failureReason}";
-            ResetAfterFullExcavationPrompt();
-        }
-        finally
-        {
-            IsFullExcavationRunning = false;
-        }
-    }
-
-    [RelayCommand]
-    private void ConfirmFullExcavationSave()
-    {
-        if (_pendingFullExcavationLog == null || _pendingFullExcavationLog.Count == 0)
-        {
-            ShowFullExcavationPrompt = false;
-            return;
-        }
-
-        try
-        {
-            string path = SaveFullExcavationLog(_pendingFullExcavationLog);
-            TrainingStatus = $"Full excavation run saved to {path}";
-        }
-        catch (Exception ex)
-        {
-            TrainingStatus = $"Failed to save full excavation run: {ex.Message}";
-        }
-        finally
-        {
-            ResetAfterFullExcavationPrompt();
-        }
-    }
-
-    [RelayCommand]
-    private void CancelFullExcavationSave()
-    {
-        TrainingStatus = "Full excavation result discarded.";
-        ResetAfterFullExcavationPrompt();
-    }
-
-    [RelayCommand]
     private async Task LoadMap()
     {
         if (PickMapFileAsync == null) return;
@@ -980,9 +924,8 @@ public partial class MainViewModel : ObservableObject
             _modelLoadedManually = false;
             _allowResumeThisSession = false;
             HasTrainingCompletedInSession = false;
-            ShowFullExcavationPrompt = false;
-            _pendingFullExcavationLog = null;
-            _deferFullExcavationPromptUntilPlaybackEnds = false;
+            ClearBestTrainingEpisodeReplay();
+            DaylightStandbyWatcherCount = 0;
 
             GameMap  = loadedMap;
             _mapPath = path;
@@ -1021,13 +964,12 @@ public partial class MainViewModel : ObservableObject
         _runGeneration++;
         _userWantsToWatch = false;
         ShowWatchPrompt = false;
-        ShowFullExcavationPrompt = false;
         StopMineralsFoundPrompt();
         StopMapLoadRevealSequence(resetRevealToFull: true);
         _pendingCompletionStatus = null;
         _pendingResetDisplayToStart = false;
-        _pendingFullExcavationLog = null;
-        _deferFullExcavationPromptUntilPlaybackEnds = false;
+        ClearBestTrainingEpisodeReplay();
+        DaylightStandbyWatcherCount = 0;
 
         StopReplayProcesses(clearLog: true, clearTrainingQueues: true);
         IsTraining = false;
@@ -1043,13 +985,6 @@ public partial class MainViewModel : ObservableObject
         {
             _playbackTimer.Stop();
             IsRunning = false;
-            if (_deferFullExcavationPromptUntilPlaybackEnds && _pendingFullExcavationLog != null)
-            {
-                _deferFullExcavationPromptUntilPlaybackEnds = false;
-                ShowFullExcavationPrompt = true;
-                TrainingStatus = "Full excavation complete. Choose YES to save or NO to discard.";
-                return;
-            }
             TrainingStatus = "Simulation complete.";
             return;
         }
@@ -1470,26 +1405,33 @@ public partial class MainViewModel : ObservableObject
         SimProgress = _log.Count > 0 ? (double)_playbackIndex / _log.Count : 0.0;
     }
 
-    private static string SaveFullExcavationLog(List<SimulationLogEntry> log)
+    private void StartCurrentPlayback()
     {
-        Directory.CreateDirectory("results");
-        string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        string path = Path.Combine("results", $"fullexcavationrun-{timestamp}.txt");
+        UpdateTimerInterval();
 
-        using var writer = new StreamWriter(path);
-        writer.WriteLine("FULL EXCAVATION RUN");
-        writer.WriteLine($"Saved at: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-        writer.WriteLine();
-        writer.WriteLine("Tick,Sol,Hour,Day,X,Y,Battery,TotalMinerals,Event");
-
-        foreach (var entry in log)
+        if (ShowGhostReplay && GhostTrail != null && GhostTrail.Count > 0)
         {
-            writer.WriteLine(
-                $"{entry.Tick},{entry.Sol + 1},{entry.HourOfSol:F1},{(entry.IsDay ? "day" : "night")}," +
-                $"{entry.X},{entry.Y},{entry.Battery:F1},{entry.TotalMinerals},\"{entry.EventNote.Replace("\"", "\"\"")}\"");
+            if (GhostIndex >= GhostTrail.Count)
+            {
+                if (_pendingGhostSnapshots.Count > 0)
+                    StartNextGhostReplayFromQueue();
+            }
+
+            if (GhostTrail == null || GhostTrail.Count == 0 || GhostIndex >= GhostTrail.Count)
+                return;
+
+            _ghostTimer.Start();
+            IsGhostMode = true;
+            IsRunning = true;
+            IsPaused = false;
+            return;
         }
 
-        return path;
+        if (!HasLog) return;
+
+        _playbackTimer.Start();
+        IsRunning = true;
+        IsPaused = false;
     }
 
     private void LoadReplayLogForPlayback(List<SimulationLogEntry> log, bool autoPlay)
@@ -1509,20 +1451,7 @@ public partial class MainViewModel : ObservableObject
         ResetDisplayToStart(clearTrainingQueues: false);
 
         if (autoPlay && HasLog)
-            Play();
-    }
-
-    private void ResetAfterFullExcavationPrompt()
-    {
-        ShowFullExcavationPrompt = false;
-        _pendingFullExcavationLog = null;
-        _deferFullExcavationPromptUntilPlaybackEnds = false;
-
-        StopReplayProcesses(clearLog: true, clearTrainingQueues: true);
-        ResetDisplayToStart(clearTrainingQueues: false);
-        ShowTrainingChart = false;
-        ShowGhostReplay = false;
-        IsGhostMode = false;
+            StartCurrentPlayback();
     }
 
     private void StopReplayProcesses(bool clearLog, bool clearTrainingQueues)
@@ -1700,6 +1629,64 @@ public partial class MainViewModel : ObservableObject
            $"Best: {bestMinerals} ⛏ | " +
            $"Buffer: {bufferSize:N0} | " +
            $"States: {statesKnown:N0}";
+
+    private readonly record struct ReplayCandidate(
+        string Source,
+        List<SimulationLogEntry> Log,
+        int DaylightStandbyTriggers);
+
+    private static ReplayCandidate SelectBestReplayCandidate(
+        IReadOnlyList<ReplayCandidate> candidates,
+        int baseX,
+        int baseY)
+    {
+        var best = candidates[0];
+        for (int i = 1; i < candidates.Count; i++)
+        {
+            if (IsBetterReplayCandidate(candidates[i], best, baseX, baseY))
+                best = candidates[i];
+        }
+
+        return best;
+    }
+
+    private static bool IsBetterReplayCandidate(
+        ReplayCandidate candidate,
+        ReplayCandidate currentBest,
+        int baseX,
+        int baseY)
+    {
+        var c = candidate.Log[^1];
+        var b = currentBest.Log[^1];
+
+        if (c.TotalMinerals != b.TotalMinerals)
+            return c.TotalMinerals > b.TotalMinerals;
+
+        bool cReturned = c.X == baseX && c.Y == baseY;
+        bool bReturned = b.X == baseX && b.Y == baseY;
+        if (cReturned != bReturned)
+            return cReturned && !bReturned;
+
+        const double BatteryTieTolerance = 1e-9;
+        if (Math.Abs(c.Battery - b.Battery) > BatteryTieTolerance)
+            return c.Battery > b.Battery;
+
+        return c.Tick < b.Tick;
+    }
+
+    private void SetBestTrainingEpisodeReplay(
+        IReadOnlyList<SimulationLogEntry> log,
+        int daylightStandbyTriggers)
+    {
+        _bestTrainingEpisodeLog = new List<SimulationLogEntry>(log.Count);
+        foreach (var entry in log)
+            _bestTrainingEpisodeLog.Add(entry);
+
+        _bestTrainingEpisodeDaylightStandbyTriggers = daylightStandbyTriggers;
+    }
+
+    private void ClearBestTrainingEpisodeReplay()
+        => SetBestTrainingEpisodeReplay(Array.Empty<SimulationLogEntry>(), 0);
 
     private void AddFastReplaySample(TrainingChartSample sample)
     {
