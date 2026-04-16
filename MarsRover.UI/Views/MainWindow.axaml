@@ -664,5 +664,31 @@
                 </StackPanel>
             </Border>
         </Border>
+
+        <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Grid.ColumnSpan="2"
+                Background="#CC000000" IsVisible="{Binding ShowMapWarningPrompt}"
+                ZIndex="110">
+            <Border Background="#2A1212" CornerRadius="12" Padding="30,24"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    MinWidth="420" MaxWidth="620">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="MAP VALIDATION WARNING"
+                               FontSize="20" FontWeight="Bold"
+                               Foreground="#FF6B57"
+                               HorizontalAlignment="Center"
+                               LetterSpacing="2"/>
+                    <TextBlock TextWrapping="Wrap"
+                               FontSize="13"
+                               Foreground="#F2D7CE"
+                               TextAlignment="Center"
+                               Text="{Binding MapWarningMessage}"/>
+                    <Button Content="OK"
+                            Classes="primary"
+                            HorizontalAlignment="Center"
+                            MinWidth="120"
+                            Command="{Binding DismissMapWarningCommand}"/>
+                </StackPanel>
+            </Border>
+        </Border>
     </Grid>
 </Window>

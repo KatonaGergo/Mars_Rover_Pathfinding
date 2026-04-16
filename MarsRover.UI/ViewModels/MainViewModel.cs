@@ -132,6 +132,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showTrainingChart = false;
     [ObservableProperty] private bool _showGhostReplay   = false;
     [ObservableProperty] private bool _showWatchPrompt   = false;
+    [ObservableProperty] private bool _showMapWarningPrompt = false;
+    [ObservableProperty] private string _mapWarningMessage = string.Empty;
     private bool _userWantsToWatch = false;
 
     // Map is visible when neither chart nor ghost is showing
@@ -936,6 +938,8 @@ public partial class MainViewModel : ObservableObject
             MapCameraCenterY = 0.5;
             TrainingStatus = $"Map loaded — {System.IO.Path.GetFileName(path)} " +
                              $"| {GameMap.RemainingMinerals.Count} minerals";
+            MapWarningMessage = string.Empty;
+            ShowMapWarningPrompt = false;
             ResetDisplayToStart();
             MapTileRevealProgress = 0;
             IsMapScannerTargetActive = true;
@@ -948,11 +952,20 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            MapWarningMessage = ex.Message;
+            ShowMapWarningPrompt = true;
             TrainingStatus = $"Failed to load map: {ex.Message}";
             StopMineralsFoundPrompt();
             StopMapLoadRevealSequence(resetRevealToFull: false);
             _isNavigatingAway = false;
         }
+    }
+
+    [RelayCommand]
+    private void DismissMapWarning()
+    {
+        ShowMapWarningPrompt = false;
+        MapWarningMessage = string.Empty;
     }
 
     // Playback timer
